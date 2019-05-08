@@ -456,6 +456,30 @@ def simulate_subcode(sub, T, strategy=maxsub_strategy):
                 piles[l + 1][2 * i].winning, piles[l + 1][2 * i + 1].winning))
     return piles
 
+def viterbi(T, c):
+    """
+    run viterbi algorithm on a trellis with codeword c, c does not have to be complete. 
+
+    returns: a pair of dictionary (d, w)
+    d marks distance  to every node in T.V[:len(c)] that has the fewest difference from c
+    w records the corresponding best paths, if there is a tie, preserve all of them. 
+    """
+    n = T.G.shape[1]
+    if len(c) > n:
+        raise Exception("Senseword length exceeds codeword")
+    d = {} # dictionary of minimum diviation, indexed by (level, state)
+    w = {} # dictionary of path, indexed by (level, state)
+    for e in T.E[0]:
+        d[(1, e[1])] = (e[2] - c[0]) % 2
+        w[(1, e[1])] = [[e[2]]]
+    for i in range(1, len(c)):
+        for e in T.E[i]:
+            if (i+1, e[1]) not in d or d[(i, e[0])] + (e[2] - c[i])%2 < d[(i+1, e[1])]:
+                d[(i+1, e[1])] = d[(i, e[0])] + (e[2] - c[i])%2
+                w[(i+1, e[1])] = [p + [e[2]] for p in w[(i, e[0])]]
+            elif d[(i, e[0])] + (e[2] - c[i])%2 == d[(i+1, e[1])]:
+                w[(i+1, e[1])].extend([p + [e[2]] for p in w[(i, e[0])]])
+    return d, w
 
 def main():
     pass
