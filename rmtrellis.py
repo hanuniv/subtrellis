@@ -402,7 +402,11 @@ def maxsub_strategy(n0, n1):
     return n0.dsub[1] >= n1.dsub[1]
 
 def maxratio_strategy(n0, n1):
-    return n0.dsub[0] == n1.dsub[0] and n0.dsub[1] / n0.dcode[1] >= n1.dsub[1] / n1.dcode[1]
+    # return n0.dsub[0] >= n1.dsub[0] and n0.dsub[1] / n0.dcode[1] >= n1.dsub[1] / n1.dcode[1]
+    # return n0.dsub[0] == n1.dsub[0] and n0.dsub[1] / n0.dcode[1] >= n1.dsub[1] / n1.dcode[1]
+    # return n0.dsub[0] == n1.dsub[0] and n0.dsub[1] / n0.dcode[1] > n1.dsub[1] / n1.dcode[1]
+    return n0.dsub[1] / n0.dcode[1] >= n1.dsub[1] / n1.dcode[1]
+    # return n0.dsub[1] / n0.dcode[1] > n1.dsub[1] / n1.dcode[1]
 
 def no_strategy(n0, n1):
     return True
@@ -448,6 +452,8 @@ def simulate_subcode(sub, T, strategy=maxsub_strategy):
     for i in range(len(pile)):
         if (pile[i].dsub[0] < pile[i].dcode[0]) or (pile[i].dsub[0] == pile[i].dcode[0] and pile[i].dsub[1] > pile[i].dcode[1] / 2):
             pile[i] = pile[i]._replace(winning='Y')
+        elif (pile[i].dsub[0] == pile[i].dcode[0] and pile[i].dsub[1] == pile[i].dcode[1] / 2):
+            pile[i] = pile[i]._replace(winning='_')
         else:
             pile[i] = pile[i]._replace(winning='N')
     for l in reversed(range(n - 1)):
