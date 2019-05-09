@@ -401,6 +401,7 @@ def maxsub_strategy(n0, n1):
     """picking 0 yields more closest subword"""
     return n0.dsub[1] >= n1.dsub[1]
 
+
 def maxratio_strategy(n0, n1):
     # return n0.dsub[0] >= n1.dsub[0] and n0.dsub[1] / n0.dcode[1] >= n1.dsub[1] / n1.dcode[1]
     # return n0.dsub[0] == n1.dsub[0] and n0.dsub[1] / n0.dcode[1] >= n1.dsub[1] / n1.dcode[1]
@@ -408,8 +409,10 @@ def maxratio_strategy(n0, n1):
     return n0.dsub[1] / n0.dcode[1] >= n1.dsub[1] / n1.dcode[1]
     # return n0.dsub[1] / n0.dcode[1] > n1.dsub[1] / n1.dcode[1]
 
+
 def no_strategy(n0, n1):
     return True
+
 
 def simulate_subcode(sub, T, strategy=maxsub_strategy):
     def yesno(a, b):
@@ -448,7 +451,7 @@ def simulate_subcode(sub, T, strategy=maxsub_strategy):
         pile = newpile
         piles.append(pile)
     # Going back, calculate winning and losing states
-    pile = piles[n-1]
+    pile = piles[n - 1]
     for i in range(len(pile)):
         if (pile[i].dsub[0] < pile[i].dcode[0]) or (pile[i].dsub[0] == pile[i].dcode[0] and pile[i].dsub[1] > pile[i].dcode[1] / 2):
             pile[i] = pile[i]._replace(winning='Y')
@@ -462,6 +465,7 @@ def simulate_subcode(sub, T, strategy=maxsub_strategy):
                 piles[l + 1][2 * i].winning, piles[l + 1][2 * i + 1].winning))
     return piles
 
+
 def viterbi(T, c):
     """
     run viterbi algorithm on a trellis with codeword c, c does not have to be complete. 
@@ -473,22 +477,46 @@ def viterbi(T, c):
     n = T.G.shape[1]
     if len(c) > n:
         raise Exception("Senseword length exceeds codeword")
-    d = {} # dictionary of minimum diviation, indexed by (level, state)
-    w = {} # dictionary of path, indexed by (level, state)
+    d = {}  # dictionary of minimum diviation, indexed by (level, state)
+    w = {}  # dictionary of path, indexed by (level, state)
     for e in T.E[0]:
         d[(1, e[1])] = (e[2] - c[0]) % 2
         w[(1, e[1])] = [[e[2]]]
     for i in range(1, len(c)):
         for e in T.E[i]:
-            if (i+1, e[1]) not in d or d[(i, e[0])] + (e[2] - c[i])%2 < d[(i+1, e[1])]:
-                d[(i+1, e[1])] = d[(i, e[0])] + (e[2] - c[i])%2
-                w[(i+1, e[1])] = [p + [e[2]] for p in w[(i, e[0])]]
-            elif d[(i, e[0])] + (e[2] - c[i])%2 == d[(i+1, e[1])]:
-                w[(i+1, e[1])].extend([p + [e[2]] for p in w[(i, e[0])]])
+            if (i + 1, e[1]) not in d or d[(i, e[0])] + (e[2] - c[i]) % 2 < d[(i + 1, e[1])]:
+                d[(i + 1, e[1])] = d[(i, e[0])] + (e[2] - c[i]) % 2
+                w[(i + 1, e[1])] = [p + [e[2]] for p in w[(i, e[0])]]
+            elif d[(i, e[0])] + (e[2] - c[i]) % 2 == d[(i + 1, e[1])]:
+                w[(i + 1, e[1])].extend([p + [e[2]] for p in w[(i, e[0])]])
     return d, w
 
+
+def tallypiles(piles):
+    """ calcuate wining probability """
+    totalprob = 0
+    pl = piles[-1]
+    for p in pl:
+        if p.winning == 'Y':
+            # print(p)
+            totalprob += p.prob
+        elif p.winning == '_':
+            totalprob += p.prob / 2
+    return totalprob
+
+
 def main():
-    pass
+    s, T = rm13trellis()
+    sub = T.codewords[s]
+    piles = simulate_subcode(sub, T, maxsub_strategy)
+    totalprob = tallypiles(piles)
+    print(totalprob)
+    piles = simulate_subcode(sub, T, maxratio_strategy)
+    totalprob = tallypiles(piles)
+    print(totalprob)
+    piles = simulate_subcode(sub, T, no_strategy)
+    totalprob = tallypiles(piles)
+    print(totalprob)
 
 
 if __name__ == '__main__':
