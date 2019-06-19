@@ -131,5 +131,17 @@ class Test(unittest.TestCase):
         self.assertEqual(w[(7,'1')],  [[0, 0, 1, 1, 0, 0, 1], 
                 [0, 1, 1, 0, 1, 0, 0], [1, 0, 1, 0, 0, 1, 0]])
 
+    def test_volumes(self):
+        G = np.array([[1, 1, 1, 1, 1, 1, 1, 1],
+                      [0, 0, 0, 0, 1, 1, 1, 1],
+                      [0, 0, 1, 1, 0, 0, 1, 1],
+                      [0, 1, 0, 1, 0, 1, 0, 1]])
+        G = minspangen(G)
+        T = Trellis(G) 
+        ds = volumes(T, [0, 0, 0, 0, 0], 3)
+        # print(ds) # TODO, is it right? 
+
+    
+
 if __name__ == '__main__':
     unittest.main()

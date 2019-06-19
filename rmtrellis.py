@@ -1,5 +1,6 @@
 import numpy as np
 from sympy import symbols, factor
+from scipy.ndimage.interpolation import shift as spshift
 from collections import namedtuple
 # from recordclass import recordclass
 import itertools
@@ -7,6 +8,7 @@ import plotly.offline as py
 import plotly.graph_objs as go
 # import networkx as nx
 
+TrellisEdge = namedtuple('TrellisEdge', 'begin end weight')
 
 class Trellis:
     def __init__(self, G, S=None):
@@ -77,7 +79,7 @@ def select_subtrellis(T, nodes):
     for i in range(n):
         Ei = []
         for e in T.E[i]:
-            if e[0] in V[i] and e[1] in V[i + 1]:
+            if e.begin in V[i] and e.end in V[i + 1]:
                 Ei.append(e)
         E.append(Ei)
     return V, E
@@ -141,12 +143,12 @@ def trellis(G, S):
             lu = inner(u, gt)
             initu = sindex(u, relindex(B[i], A[i + 1]))
             finu = sindex(u, relindex(B[i + 1], A[i + 1]))
-            Ei.append((initu, finu, lu))
+            Ei.append(TrellisEdge(*[initu, finu, lu]))
         E.append(Ei)
     return A, B, alpha, beta, rhoplus, rhominus, V, E
 
 
-def plottrellis(T, subE=None, title='Trelis'):
+def plottrellis(T, subE=None, title='Trelis', statelabel=None):
     def edgetrace(V, E, width=2, color='#888'):
         edge_trace0 = go.Scatter(
             x=[],
@@ -164,9 +166,9 @@ def plottrellis(T, subE=None, title='Trelis'):
             for e in Ei:
                 x0 = i
                 x1 = i + 1
-                y0 = V[i].index(e[0])
-                y1 = V[i + 1].index(e[1])
-                if e[2] == 0:
+                y0 = V[i].index(e.begin)
+                y1 = V[i + 1].index(e.end)
+                if e.weight == 0:
                     edge_trace0['x'] += tuple([x0, x1, None])
                     edge_trace0['y'] += tuple([y0, y1, None])
                 else:
@@ -217,7 +219,10 @@ def plottrellis(T, subE=None, title='Trelis'):
             x, y = i, j
             node_trace['x'] += tuple([x])
             node_trace['y'] += tuple([y])
-            node_trace['text'] += tuple([v])
+            try: 
+                node_trace['text'] += tuple([np.array2string(statelabel[(i, v)])])
+            except: 
+                node_trace['text'] += tuple([v])
     edge_trace0, edge_trace1 = edgetrace(V, E)
     if subE is not None:
         bedge_trace0, bedge_trace1 = edgetrace(
@@ -480,17 +485,40 @@ def viterbi(T, c):
     d = {}  # dictionary of minimum diviation, indexed by (level, state)
     w = {}  # dictionary of path, indexed by (level, state)
     for e in T.E[0]:
-        d[(1, e[1])] = (e[2] - c[0]) % 2
-        w[(1, e[1])] = [[e[2]]]
+        d[(1, e.end)] = (e.weight - c[0]) % 2
+        w[(1, e.end)] = [[e.weight]]
     for i in range(1, len(c)):
         for e in T.E[i]:
-            if (i + 1, e[1]) not in d or d[(i, e[0])] + (e[2] - c[i]) % 2 < d[(i + 1, e[1])]:
-                d[(i + 1, e[1])] = d[(i, e[0])] + (e[2] - c[i]) % 2
-                w[(i + 1, e[1])] = [p + [e[2]] for p in w[(i, e[0])]]
-            elif d[(i, e[0])] + (e[2] - c[i]) % 2 == d[(i + 1, e[1])]:
-                w[(i + 1, e[1])].extend([p + [e[2]] for p in w[(i, e[0])]])
+            if (i + 1, e.end) not in d or d[(i, e.begin)] + (e.weight - c[i]) % 2 < d[(i + 1, e.end)]:
+                d[(i + 1, e.end)] = d[(i, e.begin)] + (e.weight - c[i]) % 2
+                w[(i + 1, e.end)] = [p + [e.weight] for p in w[(i, e.begin)]]
+            elif d[(i, e.begin)] + (e.weight - c[i]) % 2 == d[(i + 1, e.end)]:
+                w[(i + 1, e.end)].extend([p + [e.weight] for p in w[(i, e.begin)]])
     return d, w
 
+
+def volumes(T, c, ne):
+    """
+    run viterbi algorithm on a trellis with codeword c, c does not have to be complete. 
+
+    returns: a dictionary ds, index by (level, state); to every node in T.V[:len(c)] 
+            ds gives a e+1 vector that tallies the number of paths with errors no greater than e
+    """
+    m, n = T.G.shape
+    if len(c) > n:
+        raise Exception("Senseword length exceeds codeword")
+    ds = {}
+    ds[(0, '')] = np.zeros(ne+1, dtype=np.int)
+    ds[(0, '')][0] = 2 ** m
+    for i in range(len(c)):
+        for e in T.E[i]:
+            if (i + 1, e.end) not in ds: 
+                ds[(i + 1, e.end)] = np.zeros(ne+1, dtype=np.int)
+            if e.weight ==  c[i]: 
+                ds[(i + 1, e.end)] += ds[(i, e.begin)] // T.rhoplus[i]
+            else:
+                ds[(i + 1, e.end)] += spshift(ds[(i, e.begin)], 1, cval=0)  // T.rhoplus[i]
+    return ds
 
 def tallypiles(piles):
     """ calcuate wining probability """
@@ -498,10 +526,9 @@ def tallypiles(piles):
     pl = piles[-1]
     for p in pl:
         if p.winning == 'Y':
-            # print(p)
             totalprob += p.prob
         elif p.winning == '_':
-            totalprob += p.prob / 2
+            totalprob += 0 # p.prob / 2
     return totalprob
 
 
