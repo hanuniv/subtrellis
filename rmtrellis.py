@@ -10,6 +10,7 @@ import plotly.graph_objs as go
 
 TrellisEdge = namedtuple('TrellisEdge', 'begin end weight')
 
+
 class Trellis:
     def __init__(self, G, S=None):
         """ Does not enforce G to be Trellis oriented"""
@@ -219,9 +220,10 @@ def plottrellis(T, subE=None, title='Trelis', statelabel=None):
             x, y = i, j
             node_trace['x'] += tuple([x])
             node_trace['y'] += tuple([y])
-            try: 
-                node_trace['text'] += tuple([np.array2string(statelabel[(i, v)])])
-            except: 
+            try:
+                node_trace['text'] += tuple(
+                    [np.array2string(statelabel[(i, v)])])
+            except:
                 node_trace['text'] += tuple([v])
     edge_trace0, edge_trace1 = edgetrace(V, E)
     if subE is not None:
@@ -403,7 +405,7 @@ def rm13trellis():
 
 
 def maxsub_strategy(n0, n1):
-    """picking 0 yields more closest subword"""
+    """picking 0 yields more closest subword, return True means sending 0"""
     return n0.dsub[1] >= n1.dsub[1]
 
 
@@ -419,17 +421,30 @@ def no_strategy(n0, n1):
     return True
 
 
+def winlose(a, b):
+    """ Combine wining / losing / boundary states in [Y N _]"""
+    if a == 'Y' and 'b' == 'Y':
+        return 'Y'
+    elif a in ['_', 'Y'] or 'b' in ['_', 'Y']:
+        return '_'
+    else:
+        return 'N'
+
+
 def simulate_subcode(sub, T, strategy=maxsub_strategy):
-    def yesno(a, b):
-        if a == 'Y' and 'b' == 'Y':
-            return 'Y'
-        elif a in ['_', 'Y'] or 'b' in ['_', 'Y']:
-            return '_'
-        else:
-            return 'N'
-    Codeprob = namedtuple('Codeprob', 'c dsub dcode prob winning')
+    """ 
+    Simulate the forward evolution of the code, given trellis and strategy. 
+
+    The strategy is assumed to based solely on the comparison of the number of path in the subcode 
+    and the number of path in the base code. 
+
+    returns: piles, a list of length n, each item is a list (pile) of Codeprob items
+    """
+
+    # Codeprob class: c = feedback word, dsub = number of path in the subcode, dcode = paths in base code.
+    Codeprob = namedtuple('Codeprob', 'c prob dsub dcode winning')
     n = T.G.shape[1]
-    p = symbols('p')
+    p = symbols('p')  # crossover probability
     pile = []
     pile.append(Codeprob(c=[0], dsub=ncloeset([0], sub), dcode=ncloeset(
         [0], T.codewords), prob=p, winning=None))
@@ -439,11 +454,11 @@ def simulate_subcode(sub, T, strategy=maxsub_strategy):
     # Going through paths, calculate forward probability
     for i in range(n - 1):
         newpile = []
-        for w, _, _, prob, _ in pile:
-            n0 = Codeprob(*[w + [0], ncloeset(w + [0], sub),
-                            ncloeset(w + [0], T.codewords), prob, None])
-            n1 = Codeprob(*[w + [1], ncloeset(w + [1], sub),
-                            ncloeset(w + [1], T.codewords), prob, None])
+        for w, prob, *_ in pile:
+            n0 = Codeprob(*[w + [0], prob, ncloeset(w + [0], sub),
+                            ncloeset(w + [0], T.codewords), None])
+            n1 = Codeprob(*[w + [1], prob, ncloeset(w + [1], sub),
+                            ncloeset(w + [1], T.codewords), None])
             if strategy(n0, n1):
                 q = 1 - p
             else:
@@ -464,11 +479,52 @@ def simulate_subcode(sub, T, strategy=maxsub_strategy):
             pile[i] = pile[i]._replace(winning='_')
         else:
             pile[i] = pile[i]._replace(winning='N')
-    for l in reversed(range(n - 1)):
-        for i in range(len(piles[l])):
-            piles[l][i] = piles[l][i]._replace(winning=yesno(
-                piles[l + 1][2 * i].winning, piles[l + 1][2 * i + 1].winning))
+    backpropagatewl(piles)
     return piles
+
+
+def steptuple(codetuple, T, level, bit, p): 
+    """ return a list of possible states for the next level given bits received""" 
+    c, prob, *_ = codetuple
+    return [codetuple._replace(prob=prob * (1-p), c=c+[bit]), 
+            codetuple._replace(prob=prob * p,     c=c+[1-bit])]
+
+
+class LookaheadStrategy:
+    """
+    a lookahead strategy class based on the trellis T and number of lookahead
+    """
+
+    def __init__(self, T, nlook):
+        self.T = T
+        self.nlook = nlook  # number of look ahaed
+
+    def hitme(self, piles, level, p=0.9):
+        """ return the next bit to send, given current piles and level"""
+        lookpiles = [piles[-1]]
+        for _ in range(self.nlook):
+            step(lookpiles, T, level)  # TODO,add next level probability
+        # Skip: assign winlose to the last pile
+        # backpropagatewl(lookpile)
+        # find the one with the best wining probability, when there is a tie, include them all 
+        bestprob = 0
+        bestc = []
+        for endings in lookpiles[-1]: 
+            if endings.prob == bestprob: 
+                bestc.append(endings.c)
+            elif substitute(endings.prob, p) > substitute(bestprob, p): # TODO, find substitute function
+                bestprob = endings.prob
+                bestc = [endings.c]
+        return bestc[0][0] # decide the first choice of the first best policy
+
+
+def simulate_lookahead():
+    """ 
+    A reworked version of simulation that applies to look ahead policies
+
+    returns: piles, a list of length n, each item is a list (pile) of Codeprob items
+    """
+    pass 
 
 
 def viterbi(T, c):
@@ -493,7 +549,8 @@ def viterbi(T, c):
                 d[(i + 1, e.end)] = d[(i, e.begin)] + (e.weight - c[i]) % 2
                 w[(i + 1, e.end)] = [p + [e.weight] for p in w[(i, e.begin)]]
             elif d[(i, e.begin)] + (e.weight - c[i]) % 2 == d[(i + 1, e.end)]:
-                w[(i + 1, e.end)].extend([p + [e.weight] for p in w[(i, e.begin)]])
+                w[(i + 1, e.end)].extend([p + [e.weight]
+                                          for p in w[(i, e.begin)]])
     return d, w
 
 
@@ -502,33 +559,53 @@ def volumes(T, c, ne):
     run viterbi algorithm on a trellis with codeword c, c does not have to be complete. 
 
     returns: a dictionary ds, index by (level, state); to every node in T.V[:len(c)] 
-            ds gives a e+1 vector that tallies the number of paths with errors no greater than e
+            ds gives a e+1 vector that tallies the number of paths with errors no greater than ne
     """
     m, n = T.G.shape
     if len(c) > n:
         raise Exception("Senseword length exceeds codeword")
     ds = {}
-    ds[(0, '')] = np.zeros(ne+1, dtype=np.int)
+    ds[(0, '')] = np.zeros(ne + 1, dtype=np.int)
     ds[(0, '')][0] = 2 ** m
     for i in range(len(c)):
         for e in T.E[i]:
-            if (i + 1, e.end) not in ds: 
-                ds[(i + 1, e.end)] = np.zeros(ne+1, dtype=np.int)
-            if e.weight ==  c[i]: 
+            if (i + 1, e.end) not in ds:
+                ds[(i + 1, e.end)] = np.zeros(ne + 1, dtype=np.int)
+            if e.weight == c[i]:
                 ds[(i + 1, e.end)] += ds[(i, e.begin)] // T.rhoplus[i]
             else:
-                ds[(i + 1, e.end)] += spshift(ds[(i, e.begin)], 1, cval=0)  // T.rhoplus[i]
+                ds[(i + 1, e.end)] += spshift(ds[(i, e.begin)],
+                                              1, cval=0) // T.rhoplus[i]
     return ds
 
-def tallypiles(piles):
-    """ calcuate wining probability """
+def backpropagatewl(piles):
+    """ 
+    assign wining labels (in place) to all pile in piles, assuming the last level YN_ label is assigned
+    """ 
+    for l in reversed(range(len(piles) - 1)):
+        for i in range(len(piles[l])):
+            piles[l][i] = piles[l][i]._replace(winning=winlose(
+                piles[l + 1][2 * i].winning, piles[l + 1][2 * i + 1].winning))
+
+
+def tallypile(pl):
+    """ adding up probability in the pile pl"""
     totalprob = 0
-    pl = piles[-1]
     for p in pl:
         if p.winning == 'Y':
             totalprob += p.prob
         elif p.winning == '_':
-            totalprob += 0 # p.prob / 2
+            totalprob += 0  # p.prob / 2
+    return totalprob
+
+def tallypile2(pl):
+    """ adding up probability in the pile pl with randomization 1/2"""
+    totalprob = 0
+    for p in pl:
+        if p.winning == 'Y':
+            totalprob += p.prob
+        elif p.winning == '_':
+            totalprob += p.prob / 2
     return totalprob
 
 
@@ -536,13 +613,13 @@ def main():
     s, T = rm13trellis()
     sub = T.codewords[s]
     piles = simulate_subcode(sub, T, maxsub_strategy)
-    totalprob = tallypiles(piles)
+    totalprob = tallypile(piles[-1])
     print(totalprob)
     piles = simulate_subcode(sub, T, maxratio_strategy)
-    totalprob = tallypiles(piles)
+    totalprob = tallypile(piles[-1])
     print(totalprob)
     piles = simulate_subcode(sub, T, no_strategy)
-    totalprob = tallypiles(piles)
+    totalprob = tallypile(piles[-1])
     print(totalprob)
 
 

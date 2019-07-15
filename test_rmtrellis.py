@@ -139,9 +139,10 @@ class Test(unittest.TestCase):
         G = minspangen(G)
         T = Trellis(G) 
         ds = volumes(T, [0, 0, 0, 0, 0], 3)
-        # print(ds) # TODO, is it right? 
+        # print(ds) # TODO, is it right?
 
-    
+class LookaheadTest(unittest.TestCase):
+    pass
 
 if __name__ == '__main__':
     unittest.main()
