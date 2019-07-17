@@ -483,11 +483,11 @@ def simulate_subcode(sub, T, strategy=maxsub_strategy):
     return piles
 
 
-def steptuple(codetuple, T, level, bit, p): 
-    """ return a list of possible states for the next level given bits received""" 
+def steptuple(codetuple, T, level, bit, p):
+    """ return a list of possible states for the next level given bits received"""
     c, prob, *_ = codetuple
-    return [codetuple._replace(prob=prob * (1-p), c=c+[bit]), 
-            codetuple._replace(prob=prob * p,     c=c+[1-bit])]
+    return [codetuple._replace(prob=prob * (1 - p), c=c + [bit]),
+            codetuple._replace(prob=prob * p, c=c + [1 - bit])]
 
 
 class LookaheadStrategy:
@@ -506,25 +506,27 @@ class LookaheadStrategy:
             step(lookpiles, T, level)  # TODO,add next level probability
         # Skip: assign winlose to the last pile
         # backpropagatewl(lookpile)
-        # find the one with the best wining probability, when there is a tie, include them all 
+        # find the one with the best wining probability, when there is a tie, include them all
         bestprob = 0
         bestc = []
-        for endings in lookpiles[-1]: 
-            if endings.prob == bestprob: 
+        for endings in lookpiles[-1]:
+            if endings.prob == bestprob:
                 bestc.append(endings.c)
-            elif substitute(endings.prob, p) > substitute(bestprob, p): # TODO, find substitute function
+            # TODO, find substitute function
+            elif substitute(endings.prob, p) > substitute(bestprob, p):
                 bestprob = endings.prob
                 bestc = [endings.c]
-        return bestc[0][0] # decide the first choice of the first best policy
+        return bestc[0][0]  # decide the first choice of the first best policy
 
 
-def simulate_lookahead():
+def simulate_lookahead(T, strategy=None):
     """ 
     A reworked version of simulation that applies to look ahead policies
 
     returns: piles, a list of length n, each item is a list (pile) of Codeprob items
     """
-    pass 
+    if strategy is None: 
+        
 
 
 def viterbi(T, c):
@@ -537,9 +539,10 @@ def viterbi(T, c):
     """
     n = T.G.shape[1]
     if len(c) > n:
-        raise Exception("Senseword length exceeds codeword")
+        raise Exception("Senseword length exceeds codeword.")
     d = {}  # dictionary of minimum diviation, indexed by (level, state)
-    w = {}  # dictionary of path, indexed by (level, state)
+    # dictionary of path, indexed by (level, state), the path is a list of bits
+    w = {}
     for e in T.E[0]:
         d[(1, e.end)] = (e.weight - c[0]) % 2
         w[(1, e.end)] = [[e.weight]]
@@ -553,6 +556,41 @@ def viterbi(T, c):
                                           for p in w[(i, e.begin)]])
     return d, w
 
+
+def viterbilist(T, c, ne, start=0, init=None):
+    """
+    run viterbi algorithm on the trellis T with c, starting from a given level, 
+    track all the paths with fewer than ne errors
+
+    if the start is 0, ignore the initials. 
+
+    returns w, dictionary of path, indexed by (level, state, error). 
+    Old items in w is overwritten if the level is in [start, start + len(c))
+    """
+    n = T.G.shape[1]
+    if start + len(c) > n:
+        raise Exception("Senseword length exceeds codeword.")
+    if start > 0 and init is None:
+        raise Exception("No initials for start > 0.")
+    elif start == 0:
+        w = {}  # dictionary of path, indexed by (level, state, error)
+        w[(0, T.V[0][0], 0)] = [[]]
+        for _ in range(1, ne+1):
+            w[(0, T.V[0][0], _)] = []  # will always remain []
+    for i in range(start, start + len(c)):
+        for v in T.V[i+1]:
+            for _ in range(ne + 1):
+                w[(i+1, v, _)] = []
+        for e in T.E[i]:
+            if e.weight == c[i]:
+                for _ in range(ne + 1):
+                    w[(i + 1, e.end, _)].extend([p + [e.weight]
+                                                 for p in w[(i, e.begin, _)]])
+            else:
+                for _ in range(ne):
+                    w[(i + 1, e.end, _ + 1)].extend([p + [e.weight]
+                                                     for p in w[(i, e.begin, _)]])
+    return w
 
 def volumes(T, c, ne):
     """
@@ -578,10 +616,11 @@ def volumes(T, c, ne):
                                               1, cval=0) // T.rhoplus[i]
     return ds
 
+
 def backpropagatewl(piles):
     """ 
     assign wining labels (in place) to all pile in piles, assuming the last level YN_ label is assigned
-    """ 
+    """
     for l in reversed(range(len(piles) - 1)):
         for i in range(len(piles[l])):
             piles[l][i] = piles[l][i]._replace(winning=winlose(
@@ -597,6 +636,7 @@ def tallypile(pl):
         elif p.winning == '_':
             totalprob += 0  # p.prob / 2
     return totalprob
+
 
 def tallypile2(pl):
     """ adding up probability in the pile pl with randomization 1/2"""
