@@ -1,7 +1,7 @@
 import unittest
 import numpy as np
 from rmtrellis import *
-
+from sympy import latex, plot
 
 class Test(unittest.TestCase):
 
@@ -62,6 +62,15 @@ class Test(unittest.TestCase):
                                       1], np.array([[0, 0, 0, 0, 0, 0, 0], [0, 0, 0, 0, 1, 1, 1]]))
         np.testing.assert_array_equal(closest(np.array([0, 0, 0, 0, 0, 0, 0]), T.codewords)[
                                       1], np.array([[0, 0, 0, 0, 0, 0, 0]]))
+    def test_closestat(self): 
+        self.assertEqual(closestat([0],np.array([[0,0],[0,1], [1,0],[1,1]])), [2,2,0])
+        self.assertEqual(closestat([0,0],np.array([[0,0],[0,1], [1,0],[1,1]])), [1,2,1])
+
+    def test_iswiningstat(self):
+        self.assertEqual(iswiningstat([[0, 1, 0], [0, 0, 1]]),'Y')
+        self.assertEqual(iswiningstat([[0, 1, 0], [0, 1, 1]]),'_')
+        self.assertEqual(iswiningstat([[0, 1, 0], [0, 2, 1]]),'N')
+        self.assertEqual(iswiningstat([[0, 1, 0], [1, 0, 1]]),'N')
 
     def test_subcode(self):
         """ test on RM(3, 1)"""
@@ -132,7 +141,7 @@ class Test(unittest.TestCase):
                                        [0, 1, 1, 0, 1, 0, 0], [1, 0, 1, 0, 0, 1, 0]])
 
         w = viterbilist(T, [0, 0, 0], 2)
-        print(w)
+        # print(w)
         self.assertEqual(w, {(0, '', 0): [[]], (0, '', 1): [], (0, '', 2): [],
                              (1, '0', 0): [[0]], (1, '0', 1): [], (1, '0', 2): [],
                              (1, '1', 0): [], (1, '1', 1): [[1]], (1, '1', 2): [],
@@ -161,7 +170,129 @@ class Test(unittest.TestCase):
 
 
 class LookaheadTest(unittest.TestCase):
-    pass
-    
+    def test_low_rate_codes(self):
+        tps = []
+        for nlook in range(1, 5):
+            nodes, subs, T = rm13trelliscode1()
+            piles=simulate_lookahead(subs, T, nlook=nlook, ne=2)
+            totalprob=tallypile(piles[-1])
+            tps.append(totalprob)
+        piles=simulate_lookahead(subs, T, nlook=1, ne=2, send0=send0always)
+        totalprob=tallypile(piles[-1])
+        tps.append(totalprob)
+        print(latex(tps))
+        print(latex(_) for _ in tps)
+        print(tps)
+        tps = []
+        for nlook in range(1, 5):
+            nodes, subs, T = rm13trelliscode2()
+            piles=simulate_lookahead(subs, T, nlook=nlook, ne=2)
+            totalprob=tallypile(piles[-1])
+            tps.append(totalprob)
+        piles=simulate_lookahead(subs, T, nlook=1, ne=2, send0=send0always)
+        totalprob=tallypile(piles[-1])
+        tps.append(totalprob)
+        print(latex(tps))
+        print(latex(_) for _ in tps)
+        print(tps)
+
+def mceliece():
+    G = np.array([[1, 1, 0, 1, 1, 0, 0],
+                  [0, 1, 1, 1, 0, 0, 0],
+                  [0, 0, 0, 0, 1, 1, 1]])
+
+    S = [(0, 4), (0, 4), (4, 6)]
+    plottrellis(Trellis(G, S))
+    plottrellis(Trellis(G))
+    G = np.array([[1, 1, 1, 0, 0, 0, 0],
+                  [0, 1, 0, 1, 0, 0, 0],
+                  [0, 0, 1, 1, 1, 1, 0],
+                  [0, 0, 0, 0, 0, 1, 1]])
+    plottrellis(Trellis(G))
+
+
+def minmceliece():
+    ''' testing the dual example with TOGM operation'''
+    G = np.array([[1, 1, 1, 0, 0, 0, 0],
+                  [0, 1, 0, 1, 0, 0, 0],
+                  [1, 0, 0, 0, 1, 1, 0],
+                  [1, 0, 0, 0, 1, 0, 1]])
+    print(G)
+    G = minspangen(G)
+    print(G)
+    plottrellis(Trellis(G))
+
+
+def rm13trellis():
+    ''' for Reed-Muller Code '''
+    G = np.array([[1, 1, 1, 1, 1, 1, 1, 1],
+                  [0, 0, 0, 0, 1, 1, 1, 1],
+                  [0, 0, 1, 1, 0, 0, 1, 1],
+                  [0, 1, 0, 1, 0, 1, 0, 1]])
+    G = minspangen(G)
+    n = G.shape[1]
+    # print(G)
+    T = Trellis(G)
+    plottrellis(T, title='')
+    nodes = [(2, ['00', '11']), (5, ['111', '011', '100', '000'])]
+    s = select_subcode(T, nodes)
+    subV, subE = select_subtrellis(T, nodes)
+    plottrellis(T, title='', subE=subE)
+    sub = T.codewords[s]
+    # print(T.codewords[s])
+    return s, T
+    # return simulate_subcode(sub, T, maxsub_strategy)
+
+def rm13trelliscode1(plot=False):
+    G = np.array([[1, 1, 1, 1, 1, 1, 1, 1],
+                  [0, 0, 0, 0, 1, 1, 1, 1],
+                  [0, 0, 1, 1, 0, 0, 1, 1],
+                  [0, 1, 0, 1, 0, 1, 0, 1]])
+    G = minspangen(G)
+    n = G.shape[1]
+    T = Trellis(G)
+    # obtain all combinations of subnodes in nodes 
+    node = {}
+    node[0] = [(2, ['00', '11'])]
+    node[1] = [(i, list(set(T.V[i]) - set(subV))) for i, subV in node[0]]
+    nodes = []
+    for choice in itertools.product([0, 1], repeat=len(node[0])):
+        nodes.append([node[i][k] for (k, i) in enumerate(choice)])
+    # for all subnodes get the subcode, which is the indexing list for the codewords
+    subs = []
+    for subnode in nodes:
+        s = select_subcode(T, subnode)
+        subV, subE = select_subtrellis(T, subnode)
+        if plot: plottrellis(T, title='', subE=subE)
+        sub = T.codewords[s]
+        subs.append(sub)
+    return nodes, subs, T  # cut pattern, codewords for subtrellis, and the trellis
+
+def rm13trelliscode2(plot=False):
+    G = np.array([[1, 1, 1, 1, 1, 1, 1, 1],
+                  [0, 0, 0, 0, 1, 1, 1, 1],
+                  [0, 0, 1, 1, 0, 0, 1, 1],
+                  [0, 1, 0, 1, 0, 1, 0, 1]])
+    G = minspangen(G)
+    n = G.shape[1]
+    T = Trellis(G)
+    # obtain all combinations of subnodes in nodes 
+    node = {}
+    node[0] = [(2, ['00', '11']), (5, ['111', '011', '100', '000'])]
+    node[1] = [(i, list(set(T.V[i]) - set(subV))) for i, subV in node[0]]
+    nodes = []
+    for choice in itertools.product([0, 1], repeat=len(node[0])):
+        nodes.append([node[i][k] for (k, i) in enumerate(choice)])
+    # for all subnodes get the subcode, which is the indexing list for the codewords
+    subs = []
+    for subnode in nodes:
+        s = select_subcode(T, subnode)
+        subV, subE = select_subtrellis(T, subnode)
+        if plot: plottrellis(T, title='', subE=subE)
+        sub = T.codewords[s]
+        subs.append(sub)
+    return nodes, subs, T  # cut pattern, codewords for subtrellis, and the trellis
+
+
 if __name__ == '__main__':
     unittest.main()

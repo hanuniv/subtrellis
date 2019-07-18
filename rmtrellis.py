@@ -1,11 +1,13 @@
 import numpy as np
 from sympy import symbols, factor
 from scipy.ndimage.interpolation import shift as spshift
-from collections import namedtuple
+from collections import namedtuple, Counter
 # from recordclass import recordclass
 import itertools
 import plotly.offline as py
 import plotly.graph_objs as go
+
+from pprint import pprint
 # import networkx as nx
 
 TrellisEdge = namedtuple('TrellisEdge', 'begin end weight')
@@ -40,6 +42,17 @@ def ncloeset(c, codewords):
     dmin, codes = closest(c, codewords)
     return dmin, codes.shape[0]
 
+def closestat(c, codewords):
+    """
+    return a list, the first entry counts the number of codewords that has 0 error from c, the second counts 1 error, etc. 
+    
+    """ 
+    n = codewords.shape[1]
+    if len(c)>n: 
+        raise Exception("Cannot deal with strings longer than n.")
+    d = np.array([sum((c + w) % 2) for w in codewords[:, :len(c)]])
+    c = Counter(d)
+    return [c[i] if i in c else 0 for i in range(n+1)]
 
 def select_subcode(T, nodes):
     """
@@ -356,54 +369,6 @@ def isminspan(G):
     return np.unique(np.array(S)[:, 0]).shape[0] == G.shape[0] and np.unique(np.array(S)[:, 1]).shape[0] == G.shape[0]
 
 
-def mceliece():
-    G = np.array([[1, 1, 0, 1, 1, 0, 0],
-                  [0, 1, 1, 1, 0, 0, 0],
-                  [0, 0, 0, 0, 1, 1, 1]])
-
-    S = [(0, 4), (0, 4), (4, 6)]
-    plottrellis(Trellis(G, S))
-    plottrellis(Trellis(G))
-    G = np.array([[1, 1, 1, 0, 0, 0, 0],
-                  [0, 1, 0, 1, 0, 0, 0],
-                  [0, 0, 1, 1, 1, 1, 0],
-                  [0, 0, 0, 0, 0, 1, 1]])
-    plottrellis(Trellis(G))
-
-
-def minmceliece():
-    ''' testing the dual example with TOGM operation'''
-    G = np.array([[1, 1, 1, 0, 0, 0, 0],
-                  [0, 1, 0, 1, 0, 0, 0],
-                  [1, 0, 0, 0, 1, 1, 0],
-                  [1, 0, 0, 0, 1, 0, 1]])
-    print(G)
-    G = minspangen(G)
-    print(G)
-    plottrellis(Trellis(G))
-
-
-def rm13trellis():
-    ''' for Reed-Muller Code '''
-    G = np.array([[1, 1, 1, 1, 1, 1, 1, 1],
-                  [0, 0, 0, 0, 1, 1, 1, 1],
-                  [0, 0, 1, 1, 0, 0, 1, 1],
-                  [0, 1, 0, 1, 0, 1, 0, 1]])
-    G = minspangen(G)
-    n = G.shape[1]
-    # print(G)
-    T = Trellis(G)
-    plottrellis(T, title='')
-    nodes = [(2, ['00', '11']), (5, ['111', '011', '100', '000'])]
-    s = select_subcode(T, nodes)
-    subV, subE = select_subtrellis(T, nodes)
-    plottrellis(T, title='', subE=subE)
-    sub = T.codewords[s]
-    # print(T.codewords[s])
-    return s, T
-    # return simulate_subcode(sub, T, maxsub_strategy)
-
-
 def maxsub_strategy(n0, n1):
     """picking 0 yields more closest subword, return True means sending 0"""
     return n0.dsub[1] >= n1.dsub[1]
@@ -519,15 +484,82 @@ class LookaheadStrategy:
         return bestc[0][0]  # decide the first choice of the first best policy
 
 
-def simulate_lookahead(T, strategy=None):
+def send0always(ns):
+    return True
+
+def send0subs(ns):
+    """
+    Decide whether to send 0 based on the lookahead results in ns
+    ns is a list of distance statistics
+    
+    Decide to send 0 if it is the majority choice of the wining state
     """ 
-    A reworked version of simulation that applies to look ahead policies
+    ds = [_.c[0] for _ in ns if _.winning=='Y']
+    c = Counter(ds)
+    # pprint(c)
+    return c[0] >= c[1]
+
+def simulate_lookahead(subs, T, nlook, ne=2, send0=send0subs):
+    """ 
+    A reworked version of simulation that applies to look ahead policies 
+
+    subs: a list of subtrellises, the goal is to transmit the first subtrellis. 
 
     returns: piles, a list of length n, each item is a list (pile) of Codeprob items
     """
-    if strategy is None: 
-        
+    # Codeprob class: c = feedback word, dsub = number of path in the subcode, dcode = paths in base code.
+    Codeprob = namedtuple('Codeprob', 'c prob dsub winning')
+    n = T.G.shape[1]
+    p = symbols('p')  # crossover probability
+    # The first pile
+    pile = [Codeprob(c=[], dsub=[], prob=1, winning=None)]
+    piles = [pile]
+    # Going through paths, calculate forward probability
+    for i in range(n):
+        newpile = []
+        w = {}
+        for c, prob, *_ in pile:
+            ns = []
+            for _ in itertools.product([0,1], repeat=min(nlook, n-i)):
+                # w = viterbilist(T, c+list(_), ne, start=i, init=w)
+                # pprint(w)
+                _dsub = [closestat(c + list(_), sub) for sub in subs]
+                nnode = Codeprob(c=c +list(_), prob=prob, dsub=_dsub, winning=iswiningstat(_dsub))
+                ns.append(nnode)
+            # pprint(ns)
+            if send0(ns):
+                q = 1 - p
+            else:
+                q = p
+            _dsub0 = [closestat(c + [0], sub) for sub in subs]
+            _dsub1 = [closestat(c + [1], sub) for sub in subs]
+            newpile.extend([Codeprob(*[c + [0], prob*q, _dsub0, iswiningstat(_dsub0)]),
+                            Codeprob(*[c + [1], prob*(1-q), _dsub1, iswiningstat(_dsub1)])])
+        pile = newpile
+        piles.append(pile)
+    # Going back, calculate winning and losing states
+    pile = piles[n - 1]
+    for i in range(len(pile)):
+        pile[i] = pile[i]._replace(winning=iswiningstat(pile[i].dsub))
+    backpropagatewl(piles)
+    return piles
 
+
+def iswiningstat(dsub): 
+    """ 
+    tell if the statistics of distance dsub allows the first subtrellis count to outweigh others
+
+    returns: 
+    'Y' if among the closest the first subtrellis has the most 
+    """
+    a = np.array(dsub)
+    i = np.sort(np.where(np.sum(a, axis=0) > 0)[0])[0]
+    if np.all(a[1:, i] < a[0,i]): 
+        return 'Y'
+    elif np.all(a[1:, i] <= a[0,i]): 
+        return '_'
+    else:
+        return 'N'
 
 def viterbi(T, c):
     """
@@ -562,7 +594,7 @@ def viterbilist(T, c, ne, start=0, init=None):
     run viterbi algorithm on the trellis T with c, starting from a given level, 
     track all the paths with fewer than ne errors
 
-    if the start is 0, ignore the initials. 
+    If the start is 0, ignore the initials. 
 
     returns w, dictionary of path, indexed by (level, state, error). 
     Old items in w is overwritten if the level is in [start, start + len(c))
@@ -570,17 +602,20 @@ def viterbilist(T, c, ne, start=0, init=None):
     n = T.G.shape[1]
     if start + len(c) > n:
         raise Exception("Senseword length exceeds codeword.")
-    if start > 0 and init is None:
-        raise Exception("No initials for start > 0.")
+    if start > 0:
+        if init is None:
+            raise Exception("No initials for start > 0.")
+        else:
+            start = init
     elif start == 0:
         w = {}  # dictionary of path, indexed by (level, state, error)
         w[(0, T.V[0][0], 0)] = [[]]
-        for _ in range(1, ne+1):
+        for _ in range(1, ne + 1):
             w[(0, T.V[0][0], _)] = []  # will always remain []
     for i in range(start, start + len(c)):
-        for v in T.V[i+1]:
+        for v in T.V[i + 1]:
             for _ in range(ne + 1):
-                w[(i+1, v, _)] = []
+                w[(i + 1, v, _)] = []
         for e in T.E[i]:
             if e.weight == c[i]:
                 for _ in range(ne + 1):
@@ -591,6 +626,7 @@ def viterbilist(T, c, ne, start=0, init=None):
                     w[(i + 1, e.end, _ + 1)].extend([p + [e.weight]
                                                      for p in w[(i, e.begin, _)]])
     return w
+
 
 def volumes(T, c, ne):
     """
