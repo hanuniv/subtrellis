@@ -526,7 +526,7 @@ def simulate_lookahead(subs, T, nlook, ne=2, send0=send0subs):
                 _dsub = [closestat(c + list(_), sub) for sub in subs]
                 nnode = Codeprob(c=c +list(_), prob=prob, dsub=_dsub, winning=iswiningstat(_dsub))
                 ns.append(nnode)
-            # pprint(ns)
+            pprint(ns)
             if send0(ns):
                 q = 1 - p
             else:
