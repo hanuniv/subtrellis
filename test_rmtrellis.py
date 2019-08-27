@@ -1,7 +1,15 @@
 import unittest
 import numpy as np
 from rmtrellis import *
-from sympy import latex, plot
+from sympy import latex, plot 
+
+# constants for testing 
+_G = np.array([[1, 1, 1, 1, 1, 1, 1, 1],
+               [0, 0, 0, 0, 1, 1, 1, 1],
+               [0, 0, 1, 1, 0, 0, 1, 1],
+               [0, 1, 0, 1, 0, 1, 0, 1]])
+G_rm13 = minspangen(_G)
+T_rm13 = Trellis(G_rm13)
 
 class Test(unittest.TestCase):
 
@@ -74,12 +82,7 @@ class Test(unittest.TestCase):
 
     def test_subcode(self):
         """ test on RM(3, 1)"""
-        G = np.array([[1, 1, 1, 1, 1, 1, 1, 1],
-                      [0, 0, 0, 0, 1, 1, 1, 1],
-                      [0, 0, 1, 1, 0, 0, 1, 1],
-                      [0, 1, 0, 1, 0, 1, 0, 1]])
-        G = minspangen(G)
-        T = Trellis(G)
+        T = T_rm13 
         s = select_subcode(T, [(3, ['111', '110'])])
         self.assertEqual(sum(s), 4)
         s = select_subcode(T, [(1, ['0']), (2, ['10'])])
@@ -118,12 +121,7 @@ class Test(unittest.TestCase):
                              [('0', '', 0), ('1', '', 1)]])
 
     def test_viterbi(self):
-        G = np.array([[1, 1, 1, 1, 1, 1, 1, 1],
-                      [0, 0, 0, 0, 1, 1, 1, 1],
-                      [0, 0, 1, 1, 0, 0, 1, 1],
-                      [0, 1, 0, 1, 0, 1, 0, 1]])
-        G = minspangen(G)
-        T = Trellis(G)
+        T = T_rm13 
         d, w = viterbi(T, [0, 0, 0])
         self.assertEqual(d, {(1, '0'): 0, (1, '1'): 1,
                              (2, '00'): 0, (2, '01'): 1, (2, '10'): 2, (2, '11'): 1,
@@ -159,17 +157,29 @@ class Test(unittest.TestCase):
                              (3, '111', 0): [], (3, '111', 1): [], (3, '111', 2): [[1, 0, 1]]})
 
     def test_volumes(self):
-        G = np.array([[1, 1, 1, 1, 1, 1, 1, 1],
-                      [0, 0, 0, 0, 1, 1, 1, 1],
-                      [0, 0, 1, 1, 0, 0, 1, 1],
-                      [0, 1, 0, 1, 0, 1, 0, 1]])
-        G = minspangen(G)
-        T = Trellis(G)
+        T = T_rm13 
         ds = volumes(T, [0, 0, 0, 0, 0], 3)
         # print(ds) # TODO, is it right?
 
+class SubDecodeTest(unittest.TestCase): 
+    def test_decode(self):
+        G = G_rm13
+        mc = 2
+        ms = G.shape[0] - mc
+        subdec = SubDecode(G[:mc], G[mc:])
+        w = np.random.randint(0, 2, G.shape[0])
+        # print(w, subdec.decode(w.dot(G)))
+        np.testing.assert_array_equal(w[:mc], subdec.decode(w.dot(G)))
+    def test_generator_decode(self): 
+        G = G_rm13
+        mc = 2
+        subdec = SubDecodewithGenerator(G, mc)
+        w = np.random.randint(0, 2, G.shape[0])
+        np.testing.assert_array_equal(w[:mc], subdec.decode(w.dot(G)))
+
 
 class LookaheadTest(unittest.TestCase):
+    @unittest.skip("Skipping LookaheadTest")
     def test_low_rate_codes(self):
         tps = []
         for nlook in range(1, 5):
@@ -180,9 +190,9 @@ class LookaheadTest(unittest.TestCase):
         piles=simulate_lookahead(subs, T, nlook=1, ne=2, send0=send0always)
         totalprob=tallypile(piles[-1])
         tps.append(totalprob)
-        print(latex(tps))
-        print(latex(_) for _ in tps)
-        print(tps)
+        # print(latex(tps))
+        # print(latex(_) for _ in tps)
+        # print(tps)
         tps = []
         for nlook in range(1, 5):
             nodes, subs, T = rm13trelliscode2()
@@ -192,9 +202,9 @@ class LookaheadTest(unittest.TestCase):
         piles=simulate_lookahead(subs, T, nlook=1, ne=2, send0=send0always)
         totalprob=tallypile(piles[-1])
         tps.append(totalprob)
-        print(latex(tps))
-        print(latex(_) for _ in tps)
-        print(tps)
+        # print(latex(tps))
+        # print(latex(_) for _ in tps)
+        # print(tps)
 
 def mceliece():
     G = np.array([[1, 1, 0, 1, 1, 0, 0],
@@ -217,22 +227,17 @@ def minmceliece():
                   [0, 1, 0, 1, 0, 0, 0],
                   [1, 0, 0, 0, 1, 1, 0],
                   [1, 0, 0, 0, 1, 0, 1]])
-    print(G)
+    # print(G)
     G = minspangen(G)
-    print(G)
+    # print(G)
     plottrellis(Trellis(G))
 
 
 def rm13trellis():
     ''' for Reed-Muller Code '''
-    G = np.array([[1, 1, 1, 1, 1, 1, 1, 1],
-                  [0, 0, 0, 0, 1, 1, 1, 1],
-                  [0, 0, 1, 1, 0, 0, 1, 1],
-                  [0, 1, 0, 1, 0, 1, 0, 1]])
-    G = minspangen(G)
+    G = G_rm13
+    T = T_rm13
     n = G.shape[1]
-    # print(G)
-    T = Trellis(G)
     plottrellis(T, title='')
     nodes = [(2, ['00', '11']), (5, ['111', '011', '100', '000'])]
     s = select_subcode(T, nodes)
@@ -244,13 +249,9 @@ def rm13trellis():
     # return simulate_subcode(sub, T, maxsub_strategy)
 
 def rm13trelliscode1(plot=False):
-    G = np.array([[1, 1, 1, 1, 1, 1, 1, 1],
-                  [0, 0, 0, 0, 1, 1, 1, 1],
-                  [0, 0, 1, 1, 0, 0, 1, 1],
-                  [0, 1, 0, 1, 0, 1, 0, 1]])
-    G = minspangen(G)
+    G = G_rm13
+    T = T_rm13
     n = G.shape[1]
-    T = Trellis(G)
     # obtain all combinations of subnodes in nodes 
     node = {}
     node[0] = [(2, ['00', '11'])]
@@ -269,13 +270,9 @@ def rm13trelliscode1(plot=False):
     return nodes, subs, T  # cut pattern, codewords for subtrellis, and the trellis
 
 def rm13trelliscode2(plot=False):
-    G = np.array([[1, 1, 1, 1, 1, 1, 1, 1],
-                  [0, 0, 0, 0, 1, 1, 1, 1],
-                  [0, 0, 1, 1, 0, 0, 1, 1],
-                  [0, 1, 0, 1, 0, 1, 0, 1]])
-    G = minspangen(G)
+    G = G_rm13
+    T = T_rm13
     n = G.shape[1]
-    T = Trellis(G)
     # obtain all combinations of subnodes in nodes 
     node = {}
     node[0] = [(2, ['00', '11']), (5, ['111', '011', '100', '000'])]

@@ -7,11 +7,41 @@ import itertools
 import plotly.offline as py
 import plotly.graph_objs as go
 
-from pprint import pprint
+from pprint import pprint 
+
+
+class SubDecode: 
+    """
+    class for testing which coset a codeword belongs to. 
+    C is the row space of coset leaders and S spans the coset. 
+    [C;S] has full row rank. 
+    """
+    def __init__(self, C, S):
+        """ save C and S matrices """
+        if C.shape[1] != S.shape[1]:
+            raise ValueError("C and S should have the same number of columns!")
+        self.C = C
+        self.S = S
+        self.G = np.vstack((C,S))
+        self.T = 0  # TODO, precalculate inversion matrix
+
+    def decode(self, c): 
+        """ Gives the C component of the decoded word, ignores the residual """
+        mc = self.C.shape[0]
+        x, r, *_ = np.linalg.lstsq(self.G.T, c)
+        return x[:mc].round()
+
+class SubDecodewithGenerator(SubDecode):
+    """ 
+    use the first mc rows of the generator for coset leaders 
+    """
+    def __init__(self, G, mc):
+        super().__init__(G[:mc], G[:mc])
+
+
 # import networkx as nx
 
 TrellisEdge = namedtuple('TrellisEdge', 'begin end weight')
-
 
 class Trellis:
     def __init__(self, G, S=None):
