@@ -1,4 +1,5 @@
 import numpy as np
+import sympy
 from sympy import symbols, factor
 from scipy.ndimage.interpolation import shift as spshift
 from collections import namedtuple, Counter
@@ -7,41 +8,74 @@ import itertools
 import plotly.offline as py
 import plotly.graph_objs as go
 
-from pprint import pprint 
+from pprint import pprint
 
+# import networkx as nx
 
-class SubDecode: 
+class SubDecode:
     """
     class for testing which coset a codeword belongs to. 
     C is the row space of coset leaders and S spans the coset. 
     [C;S] has full row rank. 
     """
+
     def __init__(self, C, S):
         """ save C and S matrices """
         if C.shape[1] != S.shape[1]:
             raise ValueError("C and S should have the same number of columns!")
         self.C = C
         self.S = S
-        self.G = np.vstack((C,S))
+        self.G = np.vstack((C, S))
         self.T = 0  # TODO, precalculate inversion matrix
 
-    def decode(self, c): 
+    def decode(self, c):
         """ Gives the C component of the decoded word, ignores the residual """
         mc = self.C.shape[0]
         x, r, *_ = np.linalg.lstsq(self.G.T, c)
         return x[:mc].round()
 
-class SubDecodewithGenerator(SubDecode):
+
+class SubDecodeFirstGenerator(SubDecode):
     """ 
     use the first mc rows of the generator for coset leaders 
     """
+
     def __init__(self, G, mc):
         super().__init__(G[:mc], G[:mc])
 
 
-# import networkx as nx
+class SubDecodeSelectedGenerator(SubDecode):
+    """ 
+    use the selected set of rows of the generator for coset leaders 
+    """
+
+    def __init__(self, G, lstmc):
+        lstmc = list(set(lstmc))
+        lstmcc = list(set(range(G.shape[0])) - set(lstmc))
+        super().__init__(G[lstmc], G[lstmcc])
+
+
+class SubDecodeCombineGenerator(SubDecode):
+    """
+    use a combination of rows in the generator matrix for coset leaders
+    the decoder will decode to the solution in the subspace basis
+    The input combination should be a full rank combination 
+    """
+
+    def __init__(self, G, CB):
+        C = np.array(CB).dot(G) % 2
+        _, ind = sympy.Matrix(CB).rref()
+        indc = list(set(range(G.shape[0])) - set(ind))  # ind's complement
+        SB = np.zeros(shape=(G.shape[0] - C.shape[0], G.shape[0]))
+        SB[range(SB.shape[0]), indc] = 1              # S's index
+        S = SB.dot(G)
+        assert np.linalg.matrix_rank(np.vstack((CB, SB))) == G.shape[0], \
+            "Basis coefficients do not yield a full rank generator"
+        super().__init__(C, S)
+
 
 TrellisEdge = namedtuple('TrellisEdge', 'begin end weight')
+
 
 class Trellis:
     def __init__(self, G, S=None):
@@ -72,17 +106,19 @@ def ncloeset(c, codewords):
     dmin, codes = closest(c, codewords)
     return dmin, codes.shape[0]
 
+
 def closestat(c, codewords):
     """
     return a list, the first entry counts the number of codewords that has 0 error from c, the second counts 1 error, etc. 
-    
-    """ 
+
+    """
     n = codewords.shape[1]
-    if len(c)>n: 
+    if len(c) > n:
         raise Exception("Cannot deal with strings longer than n.")
     d = np.array([sum((c + w) % 2) for w in codewords[:, :len(c)]])
     c = Counter(d)
-    return [c[i] if i in c else 0 for i in range(n+1)]
+    return [c[i] if i in c else 0 for i in range(n + 1)]
+
 
 def select_subcode(T, nodes):
     """
@@ -517,17 +553,19 @@ class LookaheadStrategy:
 def send0always(ns):
     return True
 
+
 def send0subs(ns):
     """
     Decide whether to send 0 based on the lookahead results in ns
     ns is a list of distance statistics
-    
+
     Decide to send 0 if it is the majority choice of the wining state
-    """ 
-    ds = [_.c[0] for _ in ns if _.winning=='Y']
+    """
+    ds = [_.c[0] for _ in ns if _.winning == 'Y']
     c = Counter(ds)
     # pprint(c)
     return c[0] >= c[1]
+
 
 def simulate_lookahead(subs, T, nlook, ne=2, send0=send0subs):
     """ 
@@ -550,11 +588,12 @@ def simulate_lookahead(subs, T, nlook, ne=2, send0=send0subs):
         w = {}
         for c, prob, *_ in pile:
             ns = []
-            for _ in itertools.product([0,1], repeat=min(nlook, n-i)):
+            for _ in itertools.product([0, 1], repeat=min(nlook, n - i)):
                 # w = viterbilist(T, c+list(_), ne, start=i, init=w)
                 # pprint(w)
                 _dsub = [closestat(c + list(_), sub) for sub in subs]
-                nnode = Codeprob(c=c +list(_), prob=prob, dsub=_dsub, winning=iswiningstat(_dsub))
+                nnode = Codeprob(c=c + list(_), prob=prob,
+                                 dsub=_dsub, winning=iswiningstat(_dsub))
                 ns.append(nnode)
             pprint(ns)
             if send0(ns):
@@ -563,8 +602,8 @@ def simulate_lookahead(subs, T, nlook, ne=2, send0=send0subs):
                 q = p
             _dsub0 = [closestat(c + [0], sub) for sub in subs]
             _dsub1 = [closestat(c + [1], sub) for sub in subs]
-            newpile.extend([Codeprob(*[c + [0], prob*q, _dsub0, iswiningstat(_dsub0)]),
-                            Codeprob(*[c + [1], prob*(1-q), _dsub1, iswiningstat(_dsub1)])])
+            newpile.extend([Codeprob(*[c + [0], prob * q, _dsub0, iswiningstat(_dsub0)]),
+                            Codeprob(*[c + [1], prob * (1 - q), _dsub1, iswiningstat(_dsub1)])])
         pile = newpile
         piles.append(pile)
     # Going back, calculate winning and losing states
@@ -575,7 +614,7 @@ def simulate_lookahead(subs, T, nlook, ne=2, send0=send0subs):
     return piles
 
 
-def iswiningstat(dsub): 
+def iswiningstat(dsub):
     """ 
     tell if the statistics of distance dsub allows the first subtrellis count to outweigh others
 
@@ -584,12 +623,13 @@ def iswiningstat(dsub):
     """
     a = np.array(dsub)
     i = np.sort(np.where(np.sum(a, axis=0) > 0)[0])[0]
-    if np.all(a[1:, i] < a[0,i]): 
+    if np.all(a[1:, i] < a[0, i]):
         return 'Y'
-    elif np.all(a[1:, i] <= a[0,i]): 
+    elif np.all(a[1:, i] <= a[0, i]):
         return '_'
     else:
         return 'N'
+
 
 def viterbi(T, c):
     """

@@ -173,9 +173,19 @@ class SubDecodeTest(unittest.TestCase):
     def test_generator_decode(self): 
         G = G_rm13
         mc = 2
-        subdec = SubDecodewithGenerator(G, mc)
+        subdec = SubDecodeFirstGenerator(G, mc)
         w = np.random.randint(0, 2, G.shape[0])
         np.testing.assert_array_equal(w[:mc], subdec.decode(w.dot(G)))
+        subdec = SubDecodeSelectedGenerator(G, range(2))
+        indc = [1,2]
+        subdec = SubDecodeSelectedGenerator(G, indc)
+        w = np.random.randint(0, 2, G.shape[0])
+        np.testing.assert_array_equal(w[indc], subdec.decode(w.dot(G)))
+    def test_generator_combination(self):
+        G = G_rm13
+        CB = [[1,0,1,0], [1,0,0,1]]
+        subdec = SubDecodeCombineGenerator(G, CB)
+        self.assertEqual(np.linalg.matrix_rank(subdec.G), G.shape[0])
 
 
 class LookaheadTest(unittest.TestCase):
