@@ -123,8 +123,8 @@ def ncloeset(c, codewords):
 
 def closestat(c, codewords):
     """
-    return a list, the first entry counts the number of codewords that has 0 error from c, the second counts 1 error, etc.
-
+    return a list, the first entry counts the number of codewords that has 0 error from c,
+    the second counts 1 error, etc.
     """
     n = codewords.shape[1]
     if len(c) > n:
@@ -486,7 +486,8 @@ def simulate_subcode(sub, T, strategy=maxsub_strategy):
     returns: piles, a list of length n, each item is a list (pile) of Codeprob items
     """
 
-    # Codeprob class: c = feedback word, dsub = number of path in the subcode, dcode = paths in base code.
+    # Codeprob class: c = feedback word,
+    #                 dsub = number of path in the subcode, dcode = paths in base code.
     Codeprob = namedtuple('Codeprob', 'c prob dsub dcode winning')
     n = T.G.shape[1]
     p = symbols('p')  # crossover probability
@@ -518,7 +519,8 @@ def simulate_subcode(sub, T, strategy=maxsub_strategy):
     # Going back, calculate winning and losing states
     pile = piles[n - 1]
     for i in range(len(pile)):
-        if (pile[i].dsub[0] < pile[i].dcode[0]) or (pile[i].dsub[0] == pile[i].dcode[0] and pile[i].dsub[1] > pile[i].dcode[1] / 2):
+        if (pile[i].dsub[0] < pile[i].dcode[0]) or \
+           (pile[i].dsub[0] == pile[i].dcode[0] and pile[i].dsub[1] > pile[i].dcode[1] / 2):
             pile[i] = pile[i]._replace(winning='Y')
         elif (pile[i].dsub[0] == pile[i].dcode[0] and pile[i].dsub[1] == pile[i].dcode[1] / 2):
             pile[i] = pile[i]._replace(winning='_')
@@ -589,7 +591,8 @@ def simulate_lookahead(subs, T, nlook, ne=2, send0=send0subs):
 
     returns: piles, a list of length n, each item is a list (pile) of Codeprob items
     """
-    # Codeprob class: c = feedback word, dsub = number of path in the subcode, dcode = paths in base code.
+    # Codeprob class: c = feedback word,
+    #              dsub = number of path in the subcode, dcode = paths in base code.
     Codeprob = namedtuple('Codeprob', 'c prob dsub winning')
     n = T.G.shape[1]
     p = symbols('p')  # crossover probability
@@ -770,17 +773,7 @@ def tallypile2(pl):
 
 
 def main():
-    s, T = rm13trellis()
-    sub = T.codewords[s]
-    piles = simulate_subcode(sub, T, maxsub_strategy)
-    totalprob = tallypile(piles[-1])
-    print(totalprob)
-    piles = simulate_subcode(sub, T, maxratio_strategy)
-    totalprob = tallypile(piles[-1])
-    print(totalprob)
-    piles = simulate_subcode(sub, T, no_strategy)
-    totalprob = tallypile(piles[-1])
-    print(totalprob)
+    pass
 
 
 if __name__ == '__main__':
