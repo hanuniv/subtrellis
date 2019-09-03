@@ -12,11 +12,12 @@ from pprint import pprint
 
 # import networkx as nx
 
+
 class SubDecode:
     """
-    class for testing which coset a codeword belongs to. 
-    C is the row space of coset leaders and S spans the coset. 
-    [C;S] has full row rank. 
+    class for testing which coset a codeword belongs to.
+    C is the row space of coset leaders and S spans the coset.
+    [C;S] has full row rank.
     """
 
     def __init__(self, C, S):
@@ -36,8 +37,8 @@ class SubDecode:
 
 
 class SubDecodeFirstGenerator(SubDecode):
-    """ 
-    use the first mc rows of the generator for coset leaders 
+    """
+    use the first mc rows of the generator for coset leaders
     """
 
     def __init__(self, G, mc):
@@ -45,8 +46,8 @@ class SubDecodeFirstGenerator(SubDecode):
 
 
 class SubDecodeSelectedGenerator(SubDecode):
-    """ 
-    use the selected set of rows of the generator for coset leaders 
+    """
+    use the selected set of rows of the generator for coset leaders
     """
 
     def __init__(self, G, lstmc):
@@ -59,7 +60,7 @@ class SubDecodeCombineGenerator(SubDecode):
     """
     use a combination of rows in the generator matrix for coset leaders
     the decoder will decode to the solution in the subspace basis
-    The input combination should be a full rank combination 
+    The input combination should be a full rank combination
     """
 
     def __init__(self, G, CB):
@@ -72,6 +73,19 @@ class SubDecodeCombineGenerator(SubDecode):
         assert np.linalg.matrix_rank(np.vstack((CB, SB))) == G.shape[0], \
             "Basis coefficients do not yield a full rank generator"
         super().__init__(C, S)
+
+
+def cor(a, b):
+    """
+    obtain correlation between the two codewords whose entries are between 0 and 1.
+    returns (1-2a).(1-2b)
+
+    >>> cor([1, 1], [1, 1])
+    2
+    >>> cor([1, 0], [1, 1])
+    0
+    """
+    return np.inner(1 - 2 * np.array(a), 1 - 2 * np.array(b))
 
 
 TrellisEdge = namedtuple('TrellisEdge', 'begin end weight')
@@ -109,7 +123,7 @@ def ncloeset(c, codewords):
 
 def closestat(c, codewords):
     """
-    return a list, the first entry counts the number of codewords that has 0 error from c, the second counts 1 error, etc. 
+    return a list, the first entry counts the number of codewords that has 0 error from c, the second counts 1 error, etc.
 
     """
     n = codewords.shape[1]
@@ -334,7 +348,7 @@ def plottrellis(T, subE=None, title='Trelis', statelabel=None):
 
 def bits(b):
     """
-    return all binary string of length b 
+    return all binary string of length b
 
     >>> bits(0)
     ['']
@@ -371,7 +385,7 @@ def sindex(u, ind):
 
 def relindex(B, A):
     """
-    relative index of B in A, A and B are sorted. 
+    relative index of B in A, A and B are sorted.
     >>> relindex({1, 2}, {0, 1, 2})
     [1, 2]
     >>> relindex({1}, {0, 2, 1})
@@ -463,11 +477,11 @@ def winlose(a, b):
 
 
 def simulate_subcode(sub, T, strategy=maxsub_strategy):
-    """ 
-    Simulate the forward evolution of the code, given trellis and strategy. 
+    """
+    Simulate the forward evolution of the code, given trellis and strategy.
 
-    The strategy is assumed to based solely on the comparison of the number of path in the subcode 
-    and the number of path in the base code. 
+    The strategy is assumed to based solely on the comparison of the number of path in the subcode
+    and the number of path in the base code.
 
     returns: piles, a list of length n, each item is a list (pile) of Codeprob items
     """
@@ -568,10 +582,10 @@ def send0subs(ns):
 
 
 def simulate_lookahead(subs, T, nlook, ne=2, send0=send0subs):
-    """ 
-    A reworked version of simulation that applies to look ahead policies 
+    """
+    A reworked version of simulation that applies to look ahead policies
 
-    subs: a list of subtrellises, the goal is to transmit the first subtrellis. 
+    subs: a list of subtrellises, the goal is to transmit the first subtrellis.
 
     returns: piles, a list of length n, each item is a list (pile) of Codeprob items
     """
@@ -615,11 +629,11 @@ def simulate_lookahead(subs, T, nlook, ne=2, send0=send0subs):
 
 
 def iswiningstat(dsub):
-    """ 
+    """
     tell if the statistics of distance dsub allows the first subtrellis count to outweigh others
 
-    returns: 
-    'Y' if among the closest the first subtrellis has the most 
+    returns:
+    'Y' if among the closest the first subtrellis has the most
     """
     a = np.array(dsub)
     i = np.sort(np.where(np.sum(a, axis=0) > 0)[0])[0]
@@ -633,11 +647,11 @@ def iswiningstat(dsub):
 
 def viterbi(T, c):
     """
-    run viterbi algorithm on a trellis with codeword c, c does not have to be complete. 
+    run viterbi algorithm on a trellis with codeword c, c does not have to be complete.
 
     returns: a pair of dictionary (d, w)
     d marks distance  to every node in T.V[:len(c)] that has the fewest difference from c
-    w records the corresponding best paths, if there is a tie, preserve all of them. 
+    w records the corresponding best paths, if there is a tie, preserve all of them.
     """
     n = T.G.shape[1]
     if len(c) > n:
@@ -661,12 +675,12 @@ def viterbi(T, c):
 
 def viterbilist(T, c, ne, start=0, init=None):
     """
-    run viterbi algorithm on the trellis T with c, starting from a given level, 
+    run viterbi algorithm on the trellis T with c, starting from a given level,
     track all the paths with fewer than ne errors
 
-    If the start is 0, ignore the initials. 
+    If the start is 0, ignore the initials.
 
-    returns w, dictionary of path, indexed by (level, state, error). 
+    returns w, dictionary of path, indexed by (level, state, error).
     Old items in w is overwritten if the level is in [start, start + len(c))
     """
     n = T.G.shape[1]
@@ -700,9 +714,9 @@ def viterbilist(T, c, ne, start=0, init=None):
 
 def volumes(T, c, ne):
     """
-    run viterbi algorithm on a trellis with codeword c, c does not have to be complete. 
+    run viterbi algorithm on a trellis with codeword c, c does not have to be complete.
 
-    returns: a dictionary ds, index by (level, state); to every node in T.V[:len(c)] 
+    returns: a dictionary ds, index by (level, state); to every node in T.V[:len(c)]
             ds gives a e+1 vector that tallies the number of paths with errors no greater than ne
     """
     m, n = T.G.shape
@@ -724,7 +738,7 @@ def volumes(T, c, ne):
 
 
 def backpropagatewl(piles):
-    """ 
+    """
     assign wining labels (in place) to all pile in piles, assuming the last level YN_ label is assigned
     """
     for l in reversed(range(len(piles) - 1)):
