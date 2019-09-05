@@ -1,7 +1,7 @@
 import unittest
 import numpy as np
 from rmtrellis import *
-from sympy import latex, plot
+from sympy import latex
 
 # constants for testing
 _G = np.array([[1, 1, 1, 1, 1, 1, 1, 1],
@@ -10,6 +10,7 @@ _G = np.array([[1, 1, 1, 1, 1, 1, 1, 1],
                [0, 1, 0, 1, 0, 1, 0, 1]])
 G_rm13 = minspangen(_G)
 T_rm13 = Trellis(G_rm13)
+
 
 class Test(unittest.TestCase):
 
@@ -70,15 +71,16 @@ class Test(unittest.TestCase):
                                       1], np.array([[0, 0, 0, 0, 0, 0, 0], [0, 0, 0, 0, 1, 1, 1]]))
         np.testing.assert_array_equal(closest(np.array([0, 0, 0, 0, 0, 0, 0]), T.codewords)[
                                       1], np.array([[0, 0, 0, 0, 0, 0, 0]]))
+
     def test_closestat(self):
-        self.assertEqual(closestat([0],np.array([[0,0],[0,1], [1,0],[1,1]])), [2,2,0])
-        self.assertEqual(closestat([0,0],np.array([[0,0],[0,1], [1,0],[1,1]])), [1,2,1])
+        self.assertEqual(closestat([0], np.array([[0, 0], [0, 1], [1, 0], [1, 1]])), [2, 2, 0])
+        self.assertEqual(closestat([0, 0], np.array([[0, 0], [0, 1], [1, 0], [1, 1]])), [1, 2, 1])
 
     def test_iswiningstat(self):
-        self.assertEqual(iswiningstat([[0, 1, 0], [0, 0, 1]]),'Y')
-        self.assertEqual(iswiningstat([[0, 1, 0], [0, 1, 1]]),'_')
-        self.assertEqual(iswiningstat([[0, 1, 0], [0, 2, 1]]),'N')
-        self.assertEqual(iswiningstat([[0, 1, 0], [1, 0, 1]]),'N')
+        self.assertEqual(iswiningstat([[0, 1, 0], [0, 0, 1]]), 'Y')
+        self.assertEqual(iswiningstat([[0, 1, 0], [0, 1, 1]]), '_')
+        self.assertEqual(iswiningstat([[0, 1, 0], [0, 2, 1]]), 'N')
+        self.assertEqual(iswiningstat([[0, 1, 0], [1, 0, 1]]), 'N')
 
     def test_subcode(self):
         """ test on RM(3, 1)"""
@@ -161,7 +163,25 @@ class Test(unittest.TestCase):
         ds = volumes(T, [0, 0, 0, 0, 0], 3)
         # print(ds) # TODO, is it right?
 
+
 class SubDecodeTest(unittest.TestCase):
+
+    @staticmethod
+    def rm13_data():
+        G = G_rm13
+        T = T_rm13
+        CB = [[1, 0, 1, 0], [1, 0, 0, 1]]
+        subdec = SubDecodeCombineGenerator(G, CB)
+        n = G.shape[1]
+        mc = subdec.C.shape[0]  # length of coset messages
+        ms = subdec.S.shape[0]  # length of the span basis
+        D = list(itertools.product((0, 1), repeat=mc))  # index of messages
+        s = np.array(list(itertools.product((0, 1), repeat=ms)))
+        codewords = {}
+        for d in D:
+            codewords[d] = (np.array(d).dot(subdec.C) + s.dot(subdec.S)) % 2  # group codewords by cosets
+        return G, T, subdec, D, codewords
+
     def test_decode(self):
         G = G_rm13
         mc = 2
@@ -170,22 +190,163 @@ class SubDecodeTest(unittest.TestCase):
         w = np.random.randint(0, 2, G.shape[0])
         # print(w, subdec.decode(w.dot(G)))
         np.testing.assert_array_equal(w[:mc], subdec.decode(w.dot(G)))
+
     def test_generator_decode(self):
         G = G_rm13
         mc = 2
         subdec = SubDecodeFirstGenerator(G, mc)
         w = np.random.randint(0, 2, G.shape[0])
         np.testing.assert_array_equal(w[:mc], subdec.decode(w.dot(G)))
-        subdec = SubDecodeSelectedGenerator(G, range(2))
-        indc = [1,2]
+        subdec = SubDecodeSelectedGenerator(G, range(2))  # work with iterator as well
+        indc = [1, 2]
         subdec = SubDecodeSelectedGenerator(G, indc)
         w = np.random.randint(0, 2, G.shape[0])
         np.testing.assert_array_equal(w[indc], subdec.decode(w.dot(G)))
+
     def test_generator_combination(self):
         G = G_rm13
-        CB = [[1,0,1,0], [1,0,0,1]]
+        CB = [[1, 0, 1, 0], [1, 0, 0, 1]]
         subdec = SubDecodeCombineGenerator(G, CB)
         self.assertEqual(np.linalg.matrix_rank(subdec.G), G.shape[0])
+
+    def test_edgenodepattern(self):
+        """ See if D[0]'s trajectory is correct """
+        G, T, subdec, D, codewords = self.rm13_data()
+        ep, vp = edgenodepattern(T, codewords, D)
+        V = T.V
+        E = T.E
+        n = T.n
+        d = D[0]
+        np.testing.assert_array_equal(codewords[d], np.array([[0, 0, 0, 0, 0, 0, 0, 0],
+                                                              [0, 0, 0, 0, 1, 1, 1, 1],
+                                                              [0, 1, 1, 0, 0, 1, 1, 0],
+                                                              [0, 1, 1, 0, 1, 0, 0, 1]])
+                                      )
+        vp0 = {(i, v): list(vp[i, v, d]) for i in range(n + 1) for v in V[i]}
+        self.assertEqual(vp0, {(0, ''): [True, True, True, True],
+                               (1, '0'): [True, True, True, True],
+                               (1, '1'): [False, False, False, False],
+                               (2, '00'): [True, True, False, False],
+                               (2, '01'): [False, False, True, True],
+                               (2, '10'): [False, False, False, False],
+                               (2, '11'): [False, False, False, False],
+                               (3, '000'): [True, True, False, False],
+                               (3, '001'): [False, False, False, False],
+                               (3, '010'): [False, False, True, True],
+                               (3, '011'): [False, False, False, False],
+                               (3, '100'): [False, False, False, False],
+                               (3, '101'): [False, False, False, False],
+                               (3, '110'): [False, False, False, False],
+                               (3, '111'): [False, False, False, False],
+                               (4, '00'): [True, True, False, False],
+                               (4, '01'): [False, False, False, False],
+                               (4, '10'): [False, False, True, True],
+                               (4, '11'): [False, False, False, False],
+                               (5, '000'): [True, False, False, False],
+                               (5, '001'): [False, True, False, False],
+                               (5, '010'): [False, False, False, False],
+                               (5, '011'): [False, False, False, False],
+                               (5, '100'): [False, False, True, False],
+                               (5, '101'): [False, False, False, True],
+                               (5, '110'): [False, False, False, False],
+                               (5, '111'): [False, False, False, False],
+                               (6, '00'): [True, False, False, False],
+                               (6, '01'): [False, True, False, False],
+                               (6, '10'): [False, False, True, False],
+                               (6, '11'): [False, False, False, True],
+                               (7, '0'): [True, False, True, False],
+                               (7, '1'): [False, True, False, True],
+                               (8, ''): [True, True, True, True]})
+        ep0 = {(i, e): list(ep[i, e, d]) for i in range(n) for e in E[i]}
+        self.assertEqual(ep0, {(0, TrellisEdge(begin='', end='0', weight=0)): [True, True, True, True],
+                               (0, TrellisEdge(begin='', end='1', weight=1)): [False, False, False, False],
+                               (1, TrellisEdge(begin='0', end='00', weight=0)): [True, True, False, False],
+                               (1, TrellisEdge(begin='0', end='01', weight=1)): [False, False, True, True],
+                               (1, TrellisEdge(begin='1', end='10', weight=1)): [False, False, False, False],
+                               (1, TrellisEdge(begin='1', end='11', weight=0)): [False, False, False, False],
+                               (2, TrellisEdge(begin='00', end='000', weight=0)): [True, True, False, False],
+                               (2, TrellisEdge(begin='00', end='001', weight=1)): [False, False, False, False],
+                               (2, TrellisEdge(begin='01', end='010', weight=1)): [False, False, True, True],
+                               (2, TrellisEdge(begin='01', end='011', weight=0)): [False, False, False, False],
+                               (2, TrellisEdge(begin='10', end='100', weight=1)): [False, False, False, False],
+                               (2, TrellisEdge(begin='10', end='101', weight=0)): [False, False, False, False],
+                               (2, TrellisEdge(begin='11', end='110', weight=0)): [False, False, False, False],
+                               (2, TrellisEdge(begin='11', end='111', weight=1)): [False, False, False, False],
+                               (3, TrellisEdge(begin='000', end='00', weight=0)): [True, True, False, False],
+                               (3, TrellisEdge(begin='001', end='01', weight=1)): [False, False, False, False],
+                               (3, TrellisEdge(begin='010', end='10', weight=0)): [False, False, True, True],
+                               (3, TrellisEdge(begin='011', end='11', weight=1)): [False, False, False, False],
+                               (3, TrellisEdge(begin='100', end='00', weight=1)): [False, False, False, False],
+                               (3, TrellisEdge(begin='101', end='01', weight=0)): [False, False, False, False],
+                               (3, TrellisEdge(begin='110', end='10', weight=1)): [False, False, False, False],
+                               (3, TrellisEdge(begin='111', end='11', weight=0)): [False, False, False, False],
+                               (4, TrellisEdge(begin='00', end='000', weight=0)): [True, False, False, False],
+                               (4, TrellisEdge(begin='00', end='001', weight=1)): [False, True, False, False],
+                               (4, TrellisEdge(begin='01', end='010', weight=1)): [False, False, False, False],
+                               (4, TrellisEdge(begin='01', end='011', weight=0)): [False, False, False, False],
+                               (4, TrellisEdge(begin='10', end='100', weight=0)): [False, False, True, False],
+                               (4, TrellisEdge(begin='10', end='101', weight=1)): [False, False, False, True],
+                               (4, TrellisEdge(begin='11', end='110', weight=1)): [False, False, False, False],
+                               (4, TrellisEdge(begin='11', end='111', weight=0)): [False, False, False, False],
+                               (5, TrellisEdge(begin='000', end='00', weight=0)): [True, False, False, False],
+                               (5, TrellisEdge(begin='001', end='01', weight=1)): [False, True, False, False],
+                               (5, TrellisEdge(begin='010', end='00', weight=1)): [False, False, False, False],
+                               (5, TrellisEdge(begin='011', end='01', weight=0)): [False, False, False, False],
+                               (5, TrellisEdge(begin='100', end='10', weight=1)): [False, False, True, False],
+                               (5, TrellisEdge(begin='101', end='11', weight=0)): [False, False, False, True],
+                               (5, TrellisEdge(begin='110', end='10', weight=0)): [False, False, False, False],
+                               (5, TrellisEdge(begin='111', end='11', weight=1)): [False, False, False, False],
+                               (6, TrellisEdge(begin='00', end='0', weight=0)): [True, False, False, False],
+                               (6, TrellisEdge(begin='01', end='1', weight=1)): [False, True, False, False],
+                               (6, TrellisEdge(begin='10', end='0', weight=1)): [False, False, True, False],
+                               (6, TrellisEdge(begin='11', end='1', weight=0)): [False, False, False, True],
+                               (7, TrellisEdge(begin='0', end='', weight=0)): [True, False, True, False],
+                               (7, TrellisEdge(begin='1', end='', weight=1)): [False, True, False, True]})
+
+    def test_viterbicorpasspattern(self):
+        """make sure pass and pattern are the same"""
+        G, T, subdec, D, codewords = self.rm13_data()
+        r = np.random.randint(0, 2, T.n)
+        co, closest = viterbicorpattern(T, r, codewords, D, ne=3)
+        co1, closest1 = viterbicorpass(T, r, codewords, D, ne=3)
+        self.assertEqual(co, co1)
+        self.assertEqual(closest1, dict((k, np.any(v)) for k, v in closest.items()))
+
+    def test_viterbicor(self, plot=False):
+        """
+        Test three steps of Viterbi, see notebook for output
+        Want to make sure nodepass, edgepass are correctly made (seems correct)
+        Want to make sure viberbi works right, (finally seems correct!)
+        Want to clarify the relationship between closest and nodepass: when ne=T.n they are the same, otherwise it is the cutoff version
+        """
+        G, T, subdec, D, codewords = self.rm13_data()
+        ne = 3
+        r = np.full(T.n, 0)
+        # r = np.random.randint(0, 2, T.n)
+        co, closest = viterbicorpass(T, r, codewords, D, ne=ne)
+        edgepass, nodepass = edgenodepass(T, codewords, D)
+        if ne == T.n:
+            self.assertEqual(closest, nodepass) # not the same as nodepass in general!
+        if plot:
+            d0 = 1
+            subE = [[e for e in Ei if edgepass[i, e, D[d0]]] for i, Ei in enumerate(T.E)]
+            # edgelabel = {(i,e): 'true' if t else '' for (i, e, d),t in edgepass.items() if d == D[0]}
+            # plottrellis(T, statelabel={(i,v):str(t) for (i,v,d),t in co.items() if d == D[0]}, subE=subE, edgelabel=edgelabel)
+            # when d = D[1], nodepass != closest because of ne cutoff
+            plottrellis(T, statelabel={(i, v): str(t) for (i, v, d), t in co.items() if d == D[d0]}, subE=subE)
+            plottrellis(T, statelabel={(i, v): str(t) for (i, v, d), t in closest.items() if d == D[d0]}, subE=subE)
+            plottrellis(T, statelabel={(i, v): str(t) for (i, v, d), t in nodepass.items() if d == D[d0]}, subE=subE)
+        return co, closest, nodepass
+
+    def test_simulate_cor(self):
+        G = G_rm13
+        T = T_rm13
+        ne = T.n
+        CB = [[1, 0, 1, 0], [1, 0, 0, 1]]
+        subdec = SubDecodeCombineGenerator(G, CB)
+        state_space, P, Q, *_ = simulate_cor(subdec, T, ne=ne)
+        return (state_space, P, Q, *_)
+
 
 
 class LookaheadTest(unittest.TestCase):
@@ -194,11 +355,11 @@ class LookaheadTest(unittest.TestCase):
         tps = []
         for nlook in range(1, 5):
             nodes, subs, T = rm13trelliscode1()
-            piles=simulate_lookahead(subs, T, nlook=nlook, ne=2)
-            totalprob=tallypile(piles[-1])
+            piles = simulate_lookahead(subs, T, nlook=nlook, ne=2)
+            totalprob = tallypile(piles[-1])
             tps.append(totalprob)
-        piles=simulate_lookahead(subs, T, nlook=1, ne=2, send0=send0always)
-        totalprob=tallypile(piles[-1])
+        piles = simulate_lookahead(subs, T, nlook=1, ne=2, send0=send0always)
+        totalprob = tallypile(piles[-1])
         tps.append(totalprob)
         # print(latex(tps))
         # print(latex(_) for _ in tps)
@@ -206,15 +367,16 @@ class LookaheadTest(unittest.TestCase):
         tps = []
         for nlook in range(1, 5):
             nodes, subs, T = rm13trelliscode2()
-            piles=simulate_lookahead(subs, T, nlook=nlook, ne=2)
-            totalprob=tallypile(piles[-1])
+            piles = simulate_lookahead(subs, T, nlook=nlook, ne=2)
+            totalprob = tallypile(piles[-1])
             tps.append(totalprob)
-        piles=simulate_lookahead(subs, T, nlook=1, ne=2, send0=send0always)
-        totalprob=tallypile(piles[-1])
+        piles = simulate_lookahead(subs, T, nlook=1, ne=2, send0=send0always)
+        totalprob = tallypile(piles[-1])
         tps.append(totalprob)
         # print(latex(tps))
         # print(latex(_) for _ in tps)
         # print(tps)
+
 
 def mceliece():
     G = np.array([[1, 1, 0, 1, 1, 0, 0],
@@ -247,7 +409,7 @@ def rm13trellis():
     ''' for Reed-Muller Code '''
     G = G_rm13
     T = T_rm13
-    n = G.shape[1]
+    n = T.n
     plottrellis(T, title='')
     nodes = [(2, ['00', '11']), (5, ['111', '011', '100', '000'])]
     s = select_subcode(T, nodes)
@@ -257,6 +419,7 @@ def rm13trellis():
     # print(T.codewords[s])
     return s, T
     # return simulate_subcode(sub, T, maxsub_strategy)
+
 
 def rm13simulate():
     s, T = rm13trellis()
@@ -271,10 +434,11 @@ def rm13simulate():
     totalprob = tallypile(piles[-1])
     print(totalprob)
 
+
 def rm13trelliscode1(plot=False):
     G = G_rm13
     T = T_rm13
-    n = G.shape[1]
+    n = T.n
     # obtain all combinations of subnodes in nodes
     node = {}
     node[0] = [(2, ['00', '11'])]
@@ -287,15 +451,17 @@ def rm13trelliscode1(plot=False):
     for subnode in nodes:
         s = select_subcode(T, subnode)
         subV, subE = select_subtrellis(T, subnode)
-        if plot: plottrellis(T, title='', subE=subE)
+        if plot:
+            plottrellis(T, title='', subE=subE)
         sub = T.codewords[s]
         subs.append(sub)
     return nodes, subs, T  # cut pattern, codewords for subtrellis, and the trellis
 
+
 def rm13trelliscode2(plot=False):
     G = G_rm13
     T = T_rm13
-    n = G.shape[1]
+    n = T.n
     # obtain all combinations of subnodes in nodes
     node = {}
     node[0] = [(2, ['00', '11']), (5, ['111', '011', '100', '000'])]
@@ -308,10 +474,15 @@ def rm13trelliscode2(plot=False):
     for subnode in nodes:
         s = select_subcode(T, subnode)
         subV, subE = select_subtrellis(T, subnode)
-        if plot: plottrellis(T, title='', subE=subE)
+        if plot:
+            plottrellis(T, title='', subE=subE)
         sub = T.codewords[s]
         subs.append(sub)
     return nodes, subs, T  # cut pattern, codewords for subtrellis, and the trellis
+
+
+def rm13_simulate_cor_plots(plot=False):
+    pass
 
 
 if __name__ == '__main__':
