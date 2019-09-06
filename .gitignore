@@ -1,3 +1,7 @@
+# Personal settings 
+output/
+data/
+
 # Ignore ipython
 *.ipynb
 

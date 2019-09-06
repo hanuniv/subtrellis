@@ -64,11 +64,11 @@ class SubDecodeCombineGenerator(SubDecode):
 
     def __init__(self, G, CB):
         C = np.array(CB).dot(G) % 2
-        _, ind = sympy.Matrix(CB).rref()
+        _, ind = sympy.Matrix(CB).rref()                # obtain indices of pivot rows
         indc = list(set(range(G.shape[0])) - set(ind))  # ind's complement
         SB = np.zeros(shape=(G.shape[0] - C.shape[0], G.shape[0]))
         SB[range(SB.shape[0]), indc] = 1              # S's index
-        S = SB.dot(G)
+        S = SB.dot(G) % 2
         assert np.linalg.matrix_rank(np.vstack((CB, SB))) == G.shape[0], \
             "Basis coefficients do not yield a full rank generator"
         super().__init__(C, S)
@@ -341,7 +341,7 @@ def plottrellis(T, subE=None, title='Trelis', statelabel=None, edgelabel=None):
             x, y = i, j
             node_trace['x'] += tuple([x])
             node_trace['y'] += tuple([y])
-             if statelabel and (i, v) in statelabel:
+            if statelabel and (i, v) in statelabel:
                 node_trace['text'] += tuple([statelabel[(i, v)]])
             else:
                 node_trace['text'] += tuple([v])
@@ -727,20 +727,25 @@ def edgenodepass(T, codewords, D):
     return edgepass, nodepass
 
 
-def viterbicorpattern(T, c, codewords, D, ne=3, start=0, init=None):
+def viterbicorpattern(T, c, edgepass, nodepass, codewords, D, ne=3, start=0, init=None):
     """
     obtain state transitions with the codewords
     """
     n = T.n
+    ep = edgepass
     # First obtain edge / node -> codewords look-up table
-    ep, *_ = edgenodepattern(T, codewords, D)
     if start + len(c) > n:
         raise Exception("Senseword length exceeds codeword.")
     if start > 0:
         if init is None:
             raise Exception("No initials for start > 0.")
         else:
-            co, closest = init
+            if ne != n:
+                co, closest = init
+            else:
+                co, closest = init, nodepass
+            co = co.copy()
+            closest = closest.copy() # very important!
     elif start == 0:
         v = T.V[0][0]
         # dictionary of minimum correlation, indexed by (level, node, d)
@@ -753,10 +758,10 @@ def viterbicorpattern(T, c, codewords, D, ne=3, start=0, init=None):
                 activethrough = np.logical_and(ep[i, e, d], closest[i, e.begin, d])
                 if np.any(activethrough):
                     if (i + 1, e.end, d) not in co or \
-                            co[i, e.begin, d] + cor(e.weight, c[i]) > co[i + 1, e.end, d]:
-                        co[i + 1, e.end, d] = co[i, e.begin, d] + cor(e.weight, c[i])
+                            co[i, e.begin, d] + cor(e.weight, c[i - start]) > co[i + 1, e.end, d]:
+                        co[i + 1, e.end, d] = co[i, e.begin, d] + cor(e.weight, c[i - start])
                         closest[i + 1, e.end, d] = activethrough
-                    elif co[(i, e.begin, d)] + cor(e.weight, c[i]) == co[i + 1, e.end, d]:
+                    elif co[(i, e.begin, d)] + cor(e.weight, c[i - start]) == co[i + 1, e.end, d]:
                         closest[i + 1, e.end, d] = np.logical_or(closest[i + 1, e.end, d], activethrough)
                 else:   # No active paths lead to e.end
                     co[(i + 1, e.end, d)] = (i + 1) - 2 * ne - 1                   # set cor to cutoff - 1
@@ -764,18 +769,26 @@ def viterbicorpattern(T, c, codewords, D, ne=3, start=0, init=None):
     return co, closest
 
 
-def viterbicorpass(T, c, codewords, D, ne=3, start=0, init=None):
-    # Another implementation with only pass
+def viterbicorpass(T, c, edgepass, nodepass, D, ne=3, start=0, init=None):
+    """
+    Another implementation with only pass
+    TODO describes what it is doing
+    """
     n = T.n
+    ep = edgepass
     # First obtain edge / node -> codewords look-up table
-    ep, *_ = edgenodepass(T, codewords, D)
     if start + len(c) > n:
         raise Exception("Senseword length exceeds codeword.")
     if start > 0:
         if init is None:
             raise Exception("No initials for start > 0.")
         else:
-            co, closest = init
+            if ne != n:
+                co, closest = init
+            else:
+                co, closest = init, nodepass
+            co = co.copy()
+            closest = closest.copy() # very important!
     elif start == 0:
         # dictionary of minimum correlation, indexed by (level, node, d)
         v = T.V[0][0]
@@ -790,10 +803,10 @@ def viterbicorpass(T, c, codewords, D, ne=3, start=0, init=None):
                     closest[(i + 1, e.end, d)] = False
                 activethrough = ep[i, e, d] and closest[i, e.begin, d]
                 if activethrough:  # exists active paths lead to e.end
-                    if co[i, e.begin, d] + cor(e.weight, c[i]) > co[i + 1, e.end, d]:
-                        co[i + 1, e.end, d] = co[i, e.begin, d] + cor(e.weight, c[i])
+                    if co[i, e.begin, d] + cor(e.weight, c[i - start]) > co[i + 1, e.end, d]:
+                        co[i + 1, e.end, d] = co[i, e.begin, d] + cor(e.weight, c[i - start])
                         closest[i + 1, e.end, d] = True
-                    elif co[(i, e.begin, d)] + cor(e.weight, c[i]) == co[i + 1, e.end, d]:
+                    elif co[(i, e.begin, d)] + cor(e.weight, c[i - start]) == co[i + 1, e.end, d]:
                         closest[i + 1, e.end, d] = True
                     # else correlation is too small, remain initialization.
                 # else no active path, remain initialization.
@@ -804,19 +817,11 @@ def viterbicorpass(T, c, codewords, D, ne=3, start=0, init=None):
 viterbicor = viterbicorpass
 
 
-def simulate_cor(subdec, T, ne=3, start=0, init=None，p=0.1):
-    """
-    simulate with correlation as states
-
-    subdec: The subcode classifier, we will attempt to transmit the message [0]_1^mc, i.e. in D[0]
-
-    returns: piles, a list of length n, each item is a list (pile) of Codeprob items
-    """
-    # Codeprob class: c = feedback word,
-    #              dsub = number of path in the subcode, dcode = paths in base code.
-    Codeprob = namedtuple('Codeprob', 'c prob dsub winning')
+def get_state_space_enumerate(subdec, T, ne=None):
     n = T.n
     V = T.V
+    if ne is None:
+        ne = n
     # corcutoff = n - 2 * ne  # do not consider codewords too far away, too big for code prefixes!
     # corspace = tuple(range(corcutoff, 2 * n + 1, 2))  # space of possible correlations
     mc = subdec.C.shape[0]  # length of coset messages
@@ -825,19 +830,20 @@ def simulate_cor(subdec, T, ne=3, start=0, init=None，p=0.1):
     s = np.array(list(itertools.product((0, 1), repeat=ms)))
     codewords = {}
     for d in D:
-        codewords[d] = np.array(d).dot(subdec.C) + s.dot(subdec.S)  # group codewords by cosets
+        codewords[d] = (np.array(d).dot(subdec.C) + s.dot(subdec.S))%2  # group codewords by cosets
     # Ds = [''.join(_) for _ in D] # strings if needed
 
     # Figure out all the state transitions by enumerating the received strings
     state_space = [list() for i in range(n + 1)]
     # Transition matrix, P[i,Action][state]=Next state
     P = {(i, a): dict() for i in range(n) for a in range(2)}
-    # Inverse transition matrix, Q[i,Action][Next state] = list of Previous State
-    Q = {(i, a): dict() for i in range(n) for a in range(2)}
+    # # Inverse transition matrix, Q[i,Action][Next state] = list of Previous State
+    # Q = {(i, a): dict() for i in range(n) for a in range(2)}
     # assert P[0,0] is not P[0,1] and  P[0,0]==P[0,1], 'Dictionary P init overload!'
     # assert state_space[0] is not state_space[1], 'state_space init overload '
+    edgepass, nodepass = edgenodepass(T, codewords, D)
     for r in itertools.product((0, 1), repeat=n):
-        co, *_ = viterbicor(T, r, codewords, D, ne=ne)
+        co, *_ = viterbicor(T, r, edgepass, nodepass, D, ne=ne)
         # initial state is always the same
         pstate = tuple(co[0, v, d] for v in V[0] for d in D)
         if pstate not in state_space[0]:
@@ -852,24 +858,120 @@ def simulate_cor(subdec, T, ne=3, start=0, init=None，p=0.1):
                 assert nstate == P[i, ri][pstate], "Transition is not consistent!"
             else:
                 P[i, ri][pstate] = nstate
-                if nstate not in Q[i, ri]:
-                    Q[i, ri][nstate] = [pstate]
-                else:
-                    if pstate not in Q[i, ri][nstate]:
-                        Q[i, ri][nstate].append(pstate)
+                # if nstate not in Q[i, ri]:
+                #     Q[i, ri][nstate] = [pstate]
+                # else:
+                #     if pstate not in Q[i, ri][nstate]:
+                #         Q[i, ri][nstate].append(pstate)
             pstate = nstate
         # # assert that P is the actual
         # for i in range(n):
         #     for a in range(2):
         #         for pstate, nstate in P[i, a].items():
         #             assert pstate in Q[i,a][nstate], "P, Q not inverse related!"
-    # return state_space, P, Q
-    # p = symbols('p')  # crossover probability
+    return state_space, P  # , Q
+
+
+def get_state_space_progressive(subdec, T, ne=None):
+    n = T.n
+    V = T.V
+    if ne is None:
+        ne = n
+    mc = subdec.C.shape[0]  # length of coset messages
+    ms = subdec.S.shape[0]  # length of the span basis
+    D = list(itertools.product((0, 1), repeat=mc))  # index of messages
+    s = np.array(list(itertools.product((0, 1), repeat=ms)))
+    codewords = {}
+    for d in D:
+        codewords[d] = (np.array(d).dot(subdec.C) + s.dot(subdec.S)) %2 # group codewords by cosets
+    # Figure out all the state transitions by enumerating the received strings
+    state_space = [list() for i in range(n + 1)]
+    costate_space = [list() for i in range(n + 1)]
+    # Transition matrix, P[i,Action][state]=Next state
+    P = {(i, a): dict() for i in range(n) for a in range(2)}
+    # Time 0 initial state
+    edgepass, nodepass = edgenodepass(T, codewords, D)
+    co, *_ = viterbicor(T, [], edgepass, nodepass, D, ne=ne)
+    pstate = tuple(co[0, v, d] for v in V[0] for d in D)
+    state_space[0].append(pstate)
+    costate_space[0].append(co)
+    for i in range(n):
+        for ri in range(2):
+            for pstate, co in zip(state_space[i], costate_space[i]):
+                nco, *_ = viterbicor(T, [ri], edgepass, nodepass, D, ne=ne, start=i, init=co)
+                nstate = tuple(nco[i + 1, v, d] for v in V[i + 1] for d in D)
+                P[i, ri][pstate] = nstate
+                if nstate not in state_space[i + 1]:
+                    state_space[i + 1].append(nstate)
+                    costate_space[i + 1].append({(i + 1, v, d): nco[i + 1, v, d] for v in V[i + 1] for d in D})
+    return state_space, P
+
+
+get_state_space = get_state_space_progressive
+
+
+def cal_psuccess(state_space, P, a, p):
+    """
+    calculate the probability of error with given policy a
+    """
+    n = len(state_space) - 1
+    ej = {}
+    for i in range(n + 1):
+        for s in state_space[i]:
+            ej[i, s] = 0
+    ej[0, state_space[0][0]] = 1
+    for i in range(n):
+        for s in state_space[i]:
+            if a[i, s] == 'indifferent':
+                ej[i + 1, P[i, 0][s]] += ej[i, s] / 2
+                ej[i + 1, P[i, 1][s]] += ej[i, s] / 2
+            else:
+                ej[i + 1, P[i, a[i, s]][s]] += (1 - p) * ej[i, s]
+                ej[i + 1, P[i, 1 - a[i, s]][s]] += p * ej[i, s]
+    psuccess = 0
+    for s in state_space[n]:
+        if s[0] > max(s[1:]):
+            psuccess += ej[n, s]
+    return psuccess
+
+
+def jinit_psucc(state_space):
+    n = len(state_space) - 1
     j = {}
+    for s in state_space[n]:
+        j[n, s] = 1 if s[0] > max(s[1:]) else 0   # most states are failed decoding
+    return j
+
+
+def jinit_cordiff(state_space):
+    n = len(state_space) - 1
+    j = {}
+    for s in state_space[n]:
+        j[n, s] = s[0] - max(s[1:])               # correlation difference
+    return j
+
+
+def jinit_abscor(state_space):
+    n = len(state_space) - 1
+    j = {}
+    for s in state_space[n]:
+        j[n, s] = s[0]                           # absolute correlatioon
+    return j
+
+
+def simulate_cor(state_space, P, T, p, jinit=jinit_psucc):
+    """
+    simulate with correlation as states
+
+    subdec: The subcode classifier, we will attempt to transmit the message [0]_1^mc, i.e. in D[0]
+
+    returns: TODO
+    """
+    n = T.n
+    V = T.V
+    # p = symbols('p')  # crossover probability
+    j = jinit(state_space)
     a = {}
-    for v in V[n]:
-        for s in state_space[n]:
-            j[n, s] = 1 if s[0] > max(s[1:]) else 0   # most states are failed decoding
     for i in reversed(range(n)):
         for s in state_space[i]:
             if j[i + 1, P[i, 0][s]] > j[i + 1, P[i, 1][s]]:
@@ -881,7 +983,7 @@ def simulate_cor(subdec, T, ne=3, start=0, init=None，p=0.1):
             else:
                 a[i, s] = 1
                 j[i, s] = (1 - p) * j[i + 1, P[i, 1][s]] + p * j[i + 1, P[i, 0][s]]
-    return state_space, P, Q, j, a, codewords
+    return j, a  # , codewords
 
 
 def iswiningstat(dsub):
@@ -957,7 +1059,7 @@ def viterbilist(T, c, ne, start=0, init=None):
             for _ in range(ne + 1):
                 w[(i + 1, v, _)] = []
         for e in T.E[i]:
-            if e.weight == c[i]:
+            if e.weight == c[i - start]:
                 for _ in range(ne + 1):
                     w[(i + 1, e.end, _)].extend([p + [e.weight]
                                                  for p in w[(i, e.begin, _)]])

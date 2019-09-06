@@ -4,12 +4,24 @@ from rmtrellis import *
 from sympy import latex
 
 # constants for testing
-_G = np.array([[1, 1, 1, 1, 1, 1, 1, 1],
+_G_rm13 = np.array([[1, 1, 1, 1, 1, 1, 1, 1],
                [0, 0, 0, 0, 1, 1, 1, 1],
                [0, 0, 1, 1, 0, 0, 1, 1],
                [0, 1, 0, 1, 0, 1, 0, 1]])
-G_rm13 = minspangen(_G)
+G_rm13 = minspangen(_G_rm13)
 T_rm13 = Trellis(G_rm13)
+
+_G_rm14 = np.array([[1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1],
+               [0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 1, 1, 1, 1, 1, 1],
+               [0, 0, 0, 0, 1, 1, 1, 1, 0, 0, 0, 0, 1, 1, 1, 1],
+               [0, 0, 1, 1, 0, 0, 1, 1, 0, 0, 1, 1, 0, 0, 1, 1],
+               [0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1]])
+G_rm14 = minspangen(_G_rm14)
+T_rm14 = Trellis(G_rm14)
+
+_G_rm15 = np.vstack((np.ones(2**5), np.hstack((np.diag([0]+[1]*4).dot(_G_rm14), _G_rm14))))
+G_rm15 = minspangen(_G_rm15)
+T_rm15 = Trellis(G_rm15)
 
 
 class Test(unittest.TestCase):
@@ -326,7 +338,7 @@ class SubDecodeTest(unittest.TestCase):
         co, closest = viterbicorpass(T, r, codewords, D, ne=ne)
         edgepass, nodepass = edgenodepass(T, codewords, D)
         if ne == T.n:
-            self.assertEqual(closest, nodepass) # not the same as nodepass in general!
+            self.assertEqual(closest, nodepass)  # not the same as nodepass in general!
         if plot:
             d0 = 1
             subE = [[e for e in Ei if edgepass[i, e, D[d0]]] for i, Ei in enumerate(T.E)]
@@ -334,19 +346,47 @@ class SubDecodeTest(unittest.TestCase):
             # plottrellis(T, statelabel={(i,v):str(t) for (i,v,d),t in co.items() if d == D[0]}, subE=subE, edgelabel=edgelabel)
             # when d = D[1], nodepass != closest because of ne cutoff
             plottrellis(T, statelabel={(i, v): str(t) for (i, v, d), t in co.items() if d == D[d0]}, subE=subE)
-            plottrellis(T, statelabel={(i, v): str(t) for (i, v, d), t in closest.items() if d == D[d0]}, subE=subE)
-            plottrellis(T, statelabel={(i, v): str(t) for (i, v, d), t in nodepass.items() if d == D[d0]}, subE=subE)
+            plottrellis(T, statelabel={(i, v): str(t)
+                                       for (i, v, d), t in closest.items() if d == D[d0]}, subE=subE)
+            plottrellis(T, statelabel={(i, v): str(t)
+                                       for (i, v, d), t in nodepass.items() if d == D[d0]}, subE=subE)
         return co, closest, nodepass
 
-    def test_simulate_cor(self):
-        G = G_rm13
-        T = T_rm13
-        ne = T.n
-        CB = [[1, 0, 1, 0], [1, 0, 0, 1]]
+    def test_get_state_space(self, G=G_rm13, T=T_rm13, CB=[[1, 0, 1, 0], [1, 0, 0, 1]], ne=None):
         subdec = SubDecodeCombineGenerator(G, CB)
-        state_space, P, Q, *_ = simulate_cor(subdec, T, ne=ne)
-        return (state_space, P, Q, *_)
+        state_space, P = get_state_space(subdec, T, ne=ne)
+        return (subdec, state_space, P)
 
+    def test_simulate_cor(self, plot=False, ps=np.arange(0, 0.55, 0.1),
+                               CB=[[1, 0, 1, 0], [1, 0, 0, 1]], T = T_rm13, G=G_rm13,
+                               jinits=[jinit_psucc, jinit_cordiff, jinit_abscor]):
+        psuccs = {}
+        js = {}
+        subdec, state_space, P = self.test_get_state_space(G=G, T=T, CB=CB)
+        # print("State_space Obtained!")
+        for jinit in jinits:
+            psucc = []
+            for p in ps:
+                j, a = simulate_cor(state_space, P, T, p=p, jinit=jinit)
+                psucc.append(cal_psuccess(state_space, P, a, p=p))
+            psuccs[jinit] = psucc
+            js[jinit] = p
+        if plot:
+            pass  # TODO, include plot code here?
+        return ps, psuccs, state_space
+
+    def test_cal_psuccess(self):
+        ps = np.arange(0, 0.55, 0.1)
+        CB = [[1, 0, 1, 0], [1, 0, 0, 1]]
+        perror = []
+        psucc = []
+        T = T_rm13
+        subdec, state_space, P = self.test_get_state_space(T=T_rm13, G=G_rm13, CB=CB)
+        for p in ps:
+            j, a = simulate_cor(state_space, P, T, p=p)
+            perror.append(j[0, state_space[0][0]])
+            psucc.append(cal_psuccess(state_space, P, a, p=p))
+        np.testing.assert_allclose(np.array(perror), np.array(psucc))
 
 
 class LookaheadTest(unittest.TestCase):
@@ -479,10 +519,6 @@ def rm13trelliscode2(plot=False):
         sub = T.codewords[s]
         subs.append(sub)
     return nodes, subs, T  # cut pattern, codewords for subtrellis, and the trellis
-
-
-def rm13_simulate_cor_plots(plot=False):
-    pass
 
 
 if __name__ == '__main__':
