@@ -2,24 +2,30 @@ import unittest
 import numpy as np
 from rmtrellis import *
 from sympy import latex
+import matplotlib.pyplot as plt
+plt.style.use('seaborn')
+plt.style.use('fivethirtyeight')
+import pickle
+import sys
+import json
 
 # constants for testing
 _G_rm13 = np.array([[1, 1, 1, 1, 1, 1, 1, 1],
-               [0, 0, 0, 0, 1, 1, 1, 1],
-               [0, 0, 1, 1, 0, 0, 1, 1],
-               [0, 1, 0, 1, 0, 1, 0, 1]])
+                    [0, 0, 0, 0, 1, 1, 1, 1],
+                    [0, 0, 1, 1, 0, 0, 1, 1],
+                    [0, 1, 0, 1, 0, 1, 0, 1]])
 G_rm13 = minspangen(_G_rm13)
 T_rm13 = Trellis(G_rm13)
 
 _G_rm14 = np.array([[1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1],
-               [0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 1, 1, 1, 1, 1, 1],
-               [0, 0, 0, 0, 1, 1, 1, 1, 0, 0, 0, 0, 1, 1, 1, 1],
-               [0, 0, 1, 1, 0, 0, 1, 1, 0, 0, 1, 1, 0, 0, 1, 1],
-               [0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1]])
+                    [0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 1, 1, 1, 1, 1, 1],
+                    [0, 0, 0, 0, 1, 1, 1, 1, 0, 0, 0, 0, 1, 1, 1, 1],
+                    [0, 0, 1, 1, 0, 0, 1, 1, 0, 0, 1, 1, 0, 0, 1, 1],
+                    [0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1]])
 G_rm14 = minspangen(_G_rm14)
 T_rm14 = Trellis(G_rm14)
 
-_G_rm15 = np.vstack((np.ones(2**5), np.hstack((np.diag([0]+[1]*4).dot(_G_rm14), _G_rm14))))
+_G_rm15 = np.vstack((np.ones(2**5), np.hstack((np.diag([0] + [1] * 4).dot(_G_rm14), _G_rm14))))
 G_rm15 = minspangen(_G_rm15)
 T_rm15 = Trellis(G_rm15)
 
@@ -358,11 +364,16 @@ class SubDecodeTest(unittest.TestCase):
         return (subdec, state_space, P)
 
     def test_simulate_cor(self, plot=False, ps=np.arange(0, 0.55, 0.1),
-                               CB=[[1, 0, 1, 0], [1, 0, 0, 1]], T = T_rm13, G=G_rm13,
-                               jinits=[jinit_psucc, jinit_cordiff, jinit_abscor]):
+                          CB=[[1, 0, 1, 0], [1, 0, 0, 1]], T=T_rm13, G=G_rm13,
+                          jinits=[jinit_psucc, jinit_cordiff, jinit_abscor], suffix='rm13'):
+        """
+        for a given construction, compare policies in jinits
+        TODO: Should we save the optimal policy as well for examination?
+        """
         psuccs = {}
         js = {}
         subdec, state_space, P = self.test_get_state_space(G=G, T=T, CB=CB)
+        # print("State space size: \t", [len(s) for s in state_space])
         # print("State_space Obtained!")
         for jinit in jinits:
             psucc = []
@@ -371,9 +382,97 @@ class SubDecodeTest(unittest.TestCase):
                 psucc.append(cal_psuccess(state_space, P, a, p=p))
             psuccs[jinit] = psucc
             js[jinit] = p
-        if plot:
-            pass  # TODO, include plot code here?
+        plot_psucc(ps, np.array(list(psuccs.values())), suffix=suffix, plot=plot)
         return ps, psuccs, state_space
+
+    def test_simulate_cor_cosets(self, plot=False, ps=np.arange(0, 0.55, 0.1),
+                                 T=T_rm13, G=G_rm13, dim=2, suffix='rm13'):
+        """
+        Test the performance for all possible coset divisions
+        """
+        results = {}
+        # results['G'] = G.tolist()
+        # results['suffix'] = suffix
+        for i, CB in enumerate(echelons(dim, T.m)):
+            ps, psuccs, state_space = \
+            self.test_simulate_cor(CB=CB, T=T, G=G, ps=ps, plot=plot, suffix=suffix + '_{0}dim_{1}'.format(dim, i))
+            results[i] = [CB.tolist(), [len(s) for s in state_space], list(psuccs.values())]
+        save_obj(results, 'data/'+suffix+'_{}dim_results'.format(dim))
+        return results
+
+    def slice_results(self, results):
+        dpps = np.array([psucc[0] for i, (_, _, psucc) in results.items()])
+        CBs = np.array([CB for _, (CB, _, _) in results.items()])
+        state_space_all = np.array([ss for _, (_, ss, _) in results.items()])
+        return {'psucc': dpps, 'CBs': CBs, 'states': state_space_all}
+
+    def analyze_results(self, results, ps = np.arange(0, 0.55, 0.1), dim=2, suffix='rm13'):
+        # TODO: dim should be part of results
+        sresults = self.slice_results(results)
+        dpps, CBs, state_space_all = sresults['psucc'], sresults['CBs'], sresults['states']
+        # analyze psucc order
+        print("Ordering of psucces along different ps")
+        for i in range(dpps.shape[1]):
+            dporder = np.lexsort((dpps[:,i],))
+            print(dporder)
+        # print(dpps[dporder])
+        # for analyzation of state_space size
+        print("Size of state spaces")
+        print(state_space_all)
+        # plot a combo graph of all probability of errors
+        pspan = slice(0,len(ps)) # adjust span as needed
+        plt.figure()
+        plt.plot(ps[pspan], dpps[dporder, pspan].T)
+        plt.xlabel('Crossover Probability')
+        plt.ylabel('Probability of Successful Transmission')
+        plt.savefig('output/mdpcor_'+suffix+'_{}dim_'.format(dim)+'all'+'.png')
+        plt.clf()
+        # group together curves by the last ps
+        group = groupps(dpps, -1, 1e-3)
+        # [[CBs[i].dot(G) % 2 for i in g] for g in group]; # Look at its CBs if necessary
+        print(group)
+
+    def getgroup(self, suffix='rm13', dim=1, axis=-1):
+        # TODO: Have some states left in the test class.
+        G = getattr(sys.modules[__name__], "G_" + suffix)
+        results = load_obj('data/'+suffix+'_{}dim_results'.format(dim))
+        sresults = self.slice_results(results)
+        dpps, CBs, state_space_all = sresults['psucc'], sresults['CBs'], sresults['states']
+        group = groupps(dpps, axis, 1e-3)
+        return group
+
+    def groupCBstates(self, group=None, suffix='rm13', dim=1):
+        """
+        obtain basis vector from filenames
+        """
+        G = getattr(sys.modules[__name__], "G_" + suffix)
+        results = load_obj('data/'+suffix+'_{}dim_results'.format(dim))
+        sresults = self.slice_results(results)
+        dpps, CBs, state_space_all = sresults['psucc'], sresults['CBs'], sresults['states']
+        if group is None:
+            group = groupps(dpps, -1, 1e-3)
+        CBgroup = [[CBs[i].dot(G) % 2 for i in g] for g in group]
+        state_group = [[state_space_all[i] for i in g] for g in group]
+        return CBgroup, state_group
+
+    def groupanalysis(self, suffix='rm13', dim=1, group=[[0, 1, 2, 3, 4, 5, 6, 7], [14], [8, 9, 10, 11] ,[12, 13]]):
+        with open(suffix + '_' + str(dim) + 'dim.tex', 'w') as f:
+            f.write(r'''\begin{tabular}{cccc}
+            \toprule
+            Coset Generator & $|S_i|, i=0, 1, \ldots, 8$ & Plots \\''')
+            for axis in [-1]:
+                cbgroup, stategroup = self.groupCBstates(group=group, suffix=suffix, dim=dim)
+                for ig, cbg, stateg in zip(group, cbgroup, stategroup):
+                    l = len(ig)
+                    f.write(r'\midrule' + '\n')
+                    f.write(r'{\begin{minipage}{0.3\textwidth}\begin{align*}'+'\n')
+                    for i, cb, state in zip(ig, cbg, stateg):
+                        f.write(matrix2tex(cb.astype(np.int)) + r'\\' + '\n')
+                    f.write(r'\end{align*}' + r'\end{minipage}}' + '\n')
+                    f.write(r' & {\begin{minipage}{0.3\textwidth}$' + matrix2tex(state) + r'$\end{minipage}}' + '\n')
+                    f.write(r' & ' + r'\begin{minipage}{\textwidth/3}\includegraphics[width=\textwidth]{' + \
+                          'subtrellis/output/mdpcor_{0}_{1}dim_{2}.png'.format(suffix, dim, i)+ r'}\end{minipage} \\' + '\n')
+            f.write(r'\bottomrule\end{tabular}' + '\n')
 
     def test_cal_psuccess(self):
         ps = np.arange(0, 0.55, 0.1)
@@ -416,6 +515,73 @@ class LookaheadTest(unittest.TestCase):
         # print(latex(tps))
         # print(latex(_) for _ in tps)
         # print(tps)
+
+
+def matrix2tex(a):
+    if a.ndim == 2:
+        return r"\begin{bmatrix}" + "\n".join([" & ".join(map(str,line))+"\\\\ " for line in a]) + r'\end{bmatrix}'
+    elif a.ndim == 1:
+        return r"\begin{bmatrix}" + " & ".join(str(e) for e in a) + r'\\ \end{bmatrix}'
+    else:
+        raise ValueError("Cannot deal with ndim > 2")
+
+def plotresults(results, ps=np.arange(0, 0.55, 0.1),  suffix='rm13'):
+    """
+    Replot all the figures with results
+    """
+    for i, (_, _, psucc) in results.items():
+        plot_psucc(ps, np.array(psucc), suffix=suffix+'_'+str(i))
+
+def save_obj(obj, name):
+    # with open(name + '.pkl', 'w') as f:
+        # pickle.dump(obj, f, )
+    with open(name + '.json', 'w') as f:
+        json.dump(obj, f, sort_keys=True, indent=4)
+
+
+def load_obj(name):
+    # with open(name + '.pkl', 'rb') as f:
+        # return pickle.load(f)
+    with open(name + '.json', 'r') as f:
+        return json.load(f)
+
+
+def groupps(dpps, pi=-1, tol=1e-2):
+    dporder = np.lexsort((dpps[:, pi],))
+    group = [[dporder[0]]]
+    for i in range(len(dporder) - 1):
+        if dpps[dporder[i + 1], pi] - dpps[dporder[i], pi] > tol:
+            group.append([dporder[i + 1]])
+        else:
+            group[-1].append(dporder[i + 1])
+    return group
+
+
+def plot_psucc(ps, psuccs, suffix='cb1', plot=False):
+    " Plot the probability of errors"
+    if plot: plt.figure()
+    plt.plot(ps, psuccs.T)
+    plt.legend(['Prob Succ', 'Cor Diff', 'Cor'])
+    plt.xlabel('Crossover Probability')
+    plt.ylabel('Probability of Successful Transmission')
+    plt.savefig('output/mdpcor_' + suffix + '.png')
+    if not plot: plt.clf()
+
+def echelons(nrow, ncol):
+    """generate all possible echelon forms"""
+    rows, cols = list(range(nrow)), list(range(ncol))
+    for pivots in itertools.combinations(cols, nrow):
+        # obtain places of free entries
+        freecols = list(set(cols) - set(pivots))
+        freepos = [(i, j) for i in rows for j in freecols if j > pivots[i]]
+        for freevalue in itertools.product((0, 1), repeat=len(freepos)):
+            CB = np.zeros((nrow, ncol))
+            for fp, fv in zip(freepos, freevalue):
+                CB[fp] = fv
+            for fp in zip(rows, pivots):
+                CB[fp] = 1
+            # print(CB)
+            yield CB
 
 
 def mceliece():
