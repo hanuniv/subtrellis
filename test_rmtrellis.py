@@ -441,14 +441,14 @@ class SubDecodeTest(unittest.TestCase):
         _, _, state_space_all = sresults['psucc'], sresults['CBs'], sresults['states']
         return np.unique(state_space_all, axis=0, return_inverse=True)
 
-    def getgroup(self, suffix='rm13', dim=1, axis=-1):
+    def getpsuccgroup(self, suffix='rm13', dim=1, axis=-1):
         # TODO: Have some states left in the test class.
         G = getattr(sys.modules[__name__], "G_" + suffix)
         results = self.getresults(suffix=suffix, dim=dim)
         sresults = self.slice_results(results)
         dpps, CBs, _ = sresults['psucc'], sresults['CBs'], sresults['states']
-        group = groupps(dpps, axis, 1e-3)
-        return group
+        # group = groupps(dpps, axis, 1e-3)
+        return np.unique(dpps.round(decimals=10), axis = 0, return_inverse=True)
 
     def groupCBstates(self, group=None, suffix='rm13', dim=1):
         """
@@ -482,6 +482,41 @@ class SubDecodeTest(unittest.TestCase):
                     f.write(r' & ' + r'\begin{minipage}{\textwidth/3}\includegraphics[width=\textwidth]{' + \
                           'subtrellis/output/mdpcor_{0}_{1}dim_{2}.png'.format(suffix, dim, i)+ r'}\end{minipage} \\' + '\n')
             f.write(r'\bottomrule\end{tabular}' + '\n')
+
+    def groupanalysis_longtable(self, caption='', label='tab:', suffix='rm13', dim=1, group=[[0, 1, 2, 3, 4, 5, 6, 7], [14], [8, 9, 10, 11] ,[12, 13]]):
+        with open(suffix + '_' + str(dim) + 'dim.tex', 'w') as f:
+            f.write(r'''
+            {\setlength\tabcolsep{0pt}%
+            \begin{center}
+            \begin{longtable}{p{0.33\textwidth}p{0.33\textwidth}p{0.33\textwidth}}
+            \caption{\bfseries ''' + caption + r'\label{' + label + r'''}} \\
+            \toprule
+            Coset Generator & $|S_i|, i=0, 1, \ldots, n$ & Plots \\
+            \endfirsthead %Line(s) to appear as head of the table on the first page
+
+            \multicolumn{3}{l}{{\bfseries \tablename\ \thetable{} -- continued from previous page}} \\
+            \toprule
+            Coset Generator & $|S_i|, i=0, 1, \ldots, n$ & Plots \\*\midrule
+            \endhead %Line(s) to appear at top of every page (except first)
+
+            \multicolumn{3}{r}{{Continued on next page}}\\
+            \endfoot%: Last line(s) to appear at the bottom of every page (except last)
+
+            \bottomrule
+            \endlastfoot''')
+            for axis in [-1]:
+                cbgroup, stategroup = self.groupCBstates(group=group, suffix=suffix, dim=dim)
+                for ig, cbg, stateg in zip(group, cbgroup, stategroup):
+                    l = len(ig)
+                    f.write(r'\midrule' + '\n')
+                    f.write(r'{\begin{minipage}{0.2\textwidth}\begin{align*}'+'\n')
+                    for i, cb, state in zip(ig, cbg, stateg):
+                        f.write(matrix2tex(cb.astype(np.int)) + r'\\' + '\n')
+                    f.write(r'\end{align*}' + r'\end{minipage}}' + '\n')
+                    f.write(r' & {\begin{minipage}{0.2\textwidth}$' + matrix2tex(state) + r'$\end{minipage}}' + '\n')
+                    f.write(r' & ' + r'\begin{minipage}{\textwidth/3}\includegraphics[width=\textwidth]{' + \
+                          'subtrellis/output/mdpcor_{0}_{1}dim_{2}.png'.format(suffix, dim, i)+ r'}\end{minipage} \\' + '\n')
+            f.write(r'' + '\n' + r'\end{longtable}' + '\n' + r'\end{center} }')
 
     def test_cal_psuccess(self):
         ps = np.arange(0, 0.55, 0.1)
