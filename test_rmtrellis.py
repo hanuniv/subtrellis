@@ -432,12 +432,21 @@ class SubDecodeTest(unittest.TestCase):
         # [[CBs[i].dot(G) % 2 for i in g] for g in group]; # Look at its CBs if necessary
         print(group)
 
+    def getresults(self, suffix='rm13', dim=1):
+        return load_obj('data/'+suffix+'_{}dim_results'.format(dim))
+
+    def getstategroup(self, suffix='rm13', dim=1):
+        results = self.getresults(suffix=suffix, dim=dim)
+        sresults = self.slice_results(results)
+        _, _, state_space_all = sresults['psucc'], sresults['CBs'], sresults['states']
+        return np.unique(state_space_all, axis=0, return_inverse=True)
+
     def getgroup(self, suffix='rm13', dim=1, axis=-1):
         # TODO: Have some states left in the test class.
         G = getattr(sys.modules[__name__], "G_" + suffix)
-        results = load_obj('data/'+suffix+'_{}dim_results'.format(dim))
+        results = self.getresults(suffix=suffix, dim=dim)
         sresults = self.slice_results(results)
-        dpps, CBs, state_space_all = sresults['psucc'], sresults['CBs'], sresults['states']
+        dpps, CBs, _ = sresults['psucc'], sresults['CBs'], sresults['states']
         group = groupps(dpps, axis, 1e-3)
         return group
 
@@ -519,9 +528,9 @@ class LookaheadTest(unittest.TestCase):
 
 def matrix2tex(a):
     if a.ndim == 2:
-        return r"\begin{bmatrix}" + "\n".join([" & ".join(map(str,line))+"\\\\ " for line in a]) + r'\end{bmatrix}'
+        return r"\setlength\arraycolsep{2pt}\begin{bmatrix}" + "\n".join([" & ".join(map(str,line))+"\\\\ " for line in a]) + r'\end{bmatrix}'
     elif a.ndim == 1:
-        return r"\begin{bmatrix}" + " & ".join(str(e) for e in a) + r'\\ \end{bmatrix}'
+        return r"\setlength\arraycolsep{2pt}\begin{bmatrix}" + " & ".join(str(e) for e in a) + r'\\ \end{bmatrix}'
     else:
         raise ValueError("Cannot deal with ndim > 2")
 

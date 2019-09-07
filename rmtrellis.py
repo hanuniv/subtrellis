@@ -62,13 +62,13 @@ class SubDecodeCombineGenerator(SubDecode):
     The input combination should be a full rank combination
     """
 
-    def __init__(self, G, CB):
-        C = np.array(CB).dot(G) % 2
-        _, ind = sympy.Matrix(CB).rref()                # obtain indices of pivot rows
+    def __init__(self, G, SB):                          # should specify basis for SB!
+        S = np.array(SB).dot(G) % 2
+        _, ind = sympy.Matrix(SB).rref()                # obtain indices of pivot rows
         indc = list(set(range(G.shape[0])) - set(ind))  # ind's complement
-        SB = np.zeros(shape=(G.shape[0] - C.shape[0], G.shape[0]))
-        SB[range(SB.shape[0]), indc] = 1              # S's index
-        S = SB.dot(G) % 2
+        CB = np.zeros(shape=(G.shape[0] - S.shape[0], G.shape[0]))
+        CB[range(CB.shape[0]), indc] = 1              # S's index
+        C = CB.dot(G) % 2
         assert np.linalg.matrix_rank(np.vstack((CB, SB))) == G.shape[0], \
             "Basis coefficients do not yield a full rank generator"
         super().__init__(C, S)
