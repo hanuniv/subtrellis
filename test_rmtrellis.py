@@ -439,16 +439,20 @@ class SubDecodeTest(unittest.TestCase):
         results = self.getresults(suffix=suffix, dim=dim)
         sresults = self.slice_results(results)
         _, _, state_space_all = sresults['psucc'], sresults['CBs'], sresults['states']
-        return np.unique(state_space_all, axis=0, return_inverse=True)
+        value, loc = np.unique(state_space_all, axis=0, return_inverse=True)
+        group = [list(np.where(loc==i)[0]) for i in range(value.shape[0])]
+        return value, loc, group
 
-    def getpsuccgroup(self, suffix='rm13', dim=1, axis=-1):
+    def getpsuccgroup(self, suffix='rm13', dim=1, axis=-1, dec=6):
         # TODO: Have some states left in the test class.
         G = getattr(sys.modules[__name__], "G_" + suffix)
         results = self.getresults(suffix=suffix, dim=dim)
         sresults = self.slice_results(results)
         dpps, CBs, _ = sresults['psucc'], sresults['CBs'], sresults['states']
         # group = groupps(dpps, axis, 1e-3)
-        return np.unique(dpps.round(decimals=10), axis = 0, return_inverse=True)
+        value, loc = np.unique(dpps.round(decimals=dec), axis = 0, return_inverse=True)
+        group = [list(np.where(loc==i)[0]) for i in range(value.shape[0])]
+        return value, loc, group
 
     def groupCBstates(self, group=None, suffix='rm13', dim=1):
         """
@@ -464,14 +468,18 @@ class SubDecodeTest(unittest.TestCase):
         state_group = [[state_space_all[i] for i in g] for g in group]
         return CBgroup, state_group
 
-    def groupanalysis(self, suffix='rm13', dim=1, group=[[0, 1, 2, 3, 4, 5, 6, 7], [14], [8, 9, 10, 11] ,[12, 13]]):
+    def groupanalysis_shorttable(self, suffix='rm13', dim=1,
+        group_psucc=[[1], [0, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14]],
+        group_state=[[1], [0], [2, 12], [4, 6, 8, 10], [3, 5, 7, 9, 11, 13, 14]]):
+        if not refines(group_state, group_psucc):
+            raise ValueError("State group is not a refinement of P[success].")
         with open(suffix + '_' + str(dim) + 'dim.tex', 'w') as f:
             f.write(r'''\begin{tabular}{cccc}
             \toprule
             Coset Generator & $|S_i|, i=0, 1, \ldots, 8$ & Plots \\''')
             for axis in [-1]:
-                cbgroup, stategroup = self.groupCBstates(group=group, suffix=suffix, dim=dim)
-                for ig, cbg, stateg in zip(group, cbgroup, stategroup):
+                cbgroup, stategroup = self.groupCBstates(group=group_state, suffix=suffix, dim=dim)
+                for ig, cbg, stateg in zip(group_state, cbgroup, stategroup):
                     l = len(ig)
                     f.write(r'\midrule' + '\n')
                     f.write(r'{\begin{minipage}{0.3\textwidth}\begin{align*}'+'\n')
@@ -483,12 +491,24 @@ class SubDecodeTest(unittest.TestCase):
                           'subtrellis/output/mdpcor_{0}_{1}dim_{2}.png'.format(suffix, dim, i)+ r'}\end{minipage} \\' + '\n')
             f.write(r'\bottomrule\end{tabular}' + '\n')
 
-    def groupanalysis_longtable(self, caption='', label='tab:', suffix='rm13', dim=1, group=[[0, 1, 2, 3, 4, 5, 6, 7], [14], [8, 9, 10, 11] ,[12, 13]]):
+    def groupanalysis_longtable(self, caption='', label='tab:', suffix='rm13', dim=1, \
+        group_psucc=[[1], [0, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14]],  \
+        group_state=[[1], [0], [2, 12], [4, 6, 8, 10], [3, 5, 7, 9, 11, 13, 14]]):
+        def writeline(ig, cbg, stateg, f, midrule=True):
+            if midrule:
+                f.write(r'\cmidrule{1-2}' + '\n')
+            f.write(r'{\begin{minipage}{0.2\textwidth}\begin{align*}'+'\n')
+            for i, cb, state in zip(ig, cbg, stateg):
+                f.write(matrix2tex(cb.astype(np.int)) + r'\\' + '\n')
+            f.write(r'\end{align*}\end{minipage}}' + '\n')
+            f.write(r' & {\begin{minipage}{0.2\textwidth}\begin{align*}'+'\n' + matrix2tex(state) + r'\end{align*}\end{minipage}}' + '\n')
+        if not refines(group_state, group_psucc):
+            raise ValueError("State group is not a refinement of P[success].")
         with open(suffix + '_' + str(dim) + 'dim.tex', 'w') as f:
             f.write(r'''
             {\setlength\tabcolsep{0pt}%
             \begin{center}
-            \begin{longtable}{p{0.33\textwidth}p{0.33\textwidth}p{0.33\textwidth}}
+            \begin{longtable}{m{0.33\textwidth}m{0.33\textwidth}m{0.33\textwidth}}
             \caption{\bfseries ''' + caption + r'\label{' + label + r'''}} \\
             \toprule
             Coset Generator & $|S_i|, i=0, 1, \ldots, n$ & Plots \\
@@ -503,20 +523,28 @@ class SubDecodeTest(unittest.TestCase):
             \endfoot%: Last line(s) to appear at the bottom of every page (except last)
 
             \bottomrule
-            \endlastfoot''')
-            for axis in [-1]:
-                cbgroup, stategroup = self.groupCBstates(group=group, suffix=suffix, dim=dim)
-                for ig, cbg, stateg in zip(group, cbgroup, stategroup):
-                    l = len(ig)
-                    f.write(r'\midrule' + '\n')
-                    f.write(r'{\begin{minipage}{0.2\textwidth}\begin{align*}'+'\n')
-                    for i, cb, state in zip(ig, cbg, stateg):
-                        f.write(matrix2tex(cb.astype(np.int)) + r'\\' + '\n')
-                    f.write(r'\end{align*}' + r'\end{minipage}}' + '\n')
-                    f.write(r' & {\begin{minipage}{0.2\textwidth}$' + matrix2tex(state) + r'$\end{minipage}}' + '\n')
-                    f.write(r' & ' + r'\begin{minipage}{\textwidth/3}\includegraphics[width=\textwidth]{' + \
-                          'subtrellis/output/mdpcor_{0}_{1}dim_{2}.png'.format(suffix, dim, i)+ r'}\end{minipage} \\' + '\n')
+            \endlastfoot
+            ''')
+            cbgroup, stategroup = self.groupCBstates(group=group_state, suffix=suffix, dim=dim)
+            for fl, cg in refineiter(group_state, group_psucc, list(zip(cbgroup, stategroup))):
+                l = len(fl)
+                f.write(r'\midrule' + '\n')  # long midrule above every group
+                for ig, (cbg, stateg) in fl[:1]:
+                    writeline(ig, cbg, stateg, f, midrule=False)
+                f.write(r' & ' + r'\multirow{'+str(l)+r'}{*}[0.1ex]{\begin{minipage}[c]{\textwidth/3} \rule{3pt}{0pt} \includegraphics[width=\textwidth]{' + \
+                      'subtrellis/output/mdpcor_{0}_{1}dim_{2}.png'.format(suffix, dim, ig[0])+ r'}\end{minipage}} \rule[-\textwidth/10]{0pt}{\textwidth/5}\\' + '\n')
+                for ig, (cbg, stateg) in fl[1:]:
+                    writeline(ig, cbg, stateg, f)
+                    f.write('\\\\ \n')
             f.write(r'' + '\n' + r'\end{longtable}' + '\n' + r'\end{center} }')
+
+    def test_groupanalysis(self, suffix='rm13'):
+        for dim in range(1, 4):
+            psuccclass, loc, group_psucc = self.getpsuccgroup(suffix=suffix, dim=dim)
+            stateclass, loc, group_state = self.getstategroup(suffix=suffix, dim=dim)
+            (group_psucc, group_state)
+            self.groupanalysis_longtable(suffix='rm13',dim=dim, group_psucc=group_psucc, group_state=group_state,\
+                                         label='tab:rm13dim{}'.format(dim), caption="RM(1,3) dim={} Subspaces".format(dim))
 
     def test_cal_psuccess(self):
         ps = np.arange(0, 0.55, 0.1)
@@ -560,6 +588,38 @@ class LookaheadTest(unittest.TestCase):
         # print(latex(_) for _ in tps)
         # print(tps)
 
+def refines(A, B):
+    """
+    return true if the lists in A is a refinement of lists in B
+
+    >>> refines([[1,2], [3]], [[1,2,3]])
+    True
+    >>> refines([[1,2], [3]], [[1], [2,3]])
+    False
+    >>> refines([[1,2], [3]], [[1,2], [3,4]])
+    False
+    """
+    As = [set(a) for a in A]
+    Bs = [set(b) for b in B]
+    if set().union(*As) != set().union(*Bs):
+        return False
+    for a in As:
+        if not (True in [a.issubset(b) for b in Bs]):
+            return False
+    return True
+
+def refineiter(fine, coarse, fine_list):
+    """
+    iterate [(fine, finelistitem)], coarse superset of fine
+    """
+    sfine = [set(f) for f in fine]
+    scoarse = [set(c) for c in coarse]
+    for c, sc in zip(coarse, scoarse):
+        fl = []
+        for i, (f, sf) in enumerate(zip(fine, sfine)):
+            if sf.issubset(sc):
+                fl.append((f, fine_list[i]))
+        yield fl, c
 
 def matrix2tex(a):
     if a.ndim == 2:
