@@ -1,6 +1,7 @@
 # Personal settings 
 output/
 data/
+tex/
 
 # Ignore ipython
 *.ipynb

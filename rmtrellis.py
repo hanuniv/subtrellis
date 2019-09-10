@@ -28,10 +28,24 @@ class SubDecode:
         self.S = S
         self.G = np.vstack((C, S))
 
+    def get_codewords(self):
+        """return D, codewords, codeword[d] contains the codeword for d in D """
+        mc = self.C.shape[0]  # length of coset messages
+        ms = self.S.shape[0]  # length of the span basis
+        D = list(itertools.product((0, 1), repeat=mc))  # index of messages, might have been repeated elsewhere, but here sweep under the rug of subdec and generate as needed
+        s = np.array(list(itertools.product((0, 1), repeat=ms)))
+        codewords = {}
+        for d in D:
+            codewords[d] = (np.array(d).dot(self.C) + s.dot(self.S)) %2 # group codewords by cosets
+        return D, codewords
+
+    def compute_codewords(self):
+        self.D, self.codewords = self.get_codewords()
+
     def decode(self, c):
         """ Gives the C component of the decoded word, ignores the residual """
         mc = self.C.shape[0]
-        x, r, *_ = np.linalg.lstsq(self.G.T, c)
+        x, r, *_ = np.linalg.lstsq(self.G.T, c, rcond=None)
         return x[:mc].round()
 
 
@@ -124,16 +138,24 @@ class Trellis:
             self.codewords.append(i.dot(G) % 2)
         self.codewords = np.array(self.codewords)
 
+    def setsub(self, SB):
+        self.subdec = SubDecodeCombineGenerator(self.G, SB)
+        self.subdec.compute_codewords()   # save codewords dictionary in subdec
+        self.D = self.subdec.D
+        self.edgepass, self.nodepass = edgenodepass(self, self.subdec.codewords, self.subdec.D)
 
 def closest(c, codewords):
     """
-    return codewords in trellis T that are closest to c
+    return codewords in trellis T (whose prefixes) are closest to c
     """
     d = np.array([sum((c + w) % 2) for w in codewords[:, :len(c)]])
     return min(d), codewords[d == min(d)]
 
 
 def ncloeset(c, codewords):
+    """
+    return number of closest codewords
+    """
     dmin, codes = closest(c, codewords)
     return dmin, codes.shape[0]
 
@@ -172,7 +194,9 @@ def select_subcode(T, nodes):
 
 def select_subtrellis(T, nodes):
     """
-    return the edge set passed by the node subsets
+    return the edge and node set passed by the node subsets.
+    First call select_subcode and then, with the all the passed messages,
+    obtain the nodes from the trellis B matrix.
     """
     m = T.messages[select_subcode(T, nodes)]
     n = T.n
@@ -259,7 +283,13 @@ def trellis(G, S):
     return A, B, alpha, beta, rhoplus, rhominus, V, E
 
 
-def plottrellis(T, subE=None, title='Trelis', statelabel=None, edgelabel=None):
+def plottrellis(T, subE=None, title='Trelis', statelabel=None, edgelabel=None, maxlevel=None, hovertext=None):
+    """
+    if statelabel == None, do not add state label
+    if statelabel == {} or some keys are missing, use default label
+
+    requires T to have (T.n, T.V, T.E)
+    """
     def edgetrace(V, E, width=2, color='#888', edgelabel=None):
         edge_trace0 = go.Scatter(
             x=[],
@@ -281,80 +311,94 @@ def plottrellis(T, subE=None, title='Trelis', statelabel=None, edgelabel=None):
             mode='text',
             textposition="top center")
         for i, Ei in enumerate(E):
-            for e in Ei:
-                x0 = i
-                x1 = i + 1
-                y0 = V[i].index(e.begin)
-                y1 = V[i + 1].index(e.end)
-                if e.weight == 0:
-                    edge_trace0['x'] += tuple([x0, x1, None])
-                    edge_trace0['y'] += tuple([y0, y1, None])
-                else:
-                    edge_trace1['x'] += tuple([x0, x1, None])
-                    edge_trace1['y'] += tuple([y0, y1, None])
-                if edgelabel and (i, e) in edgelabel:
-                    text_trace['x'] += tuple([(x0 + x1) / 2])
-                    text_trace['y'] += tuple([(y0 + y1) / 2])
-                    text_trace['text'] += tuple([edgelabel[(i, e)]])
+            if i <= maxlevel - 1:
+                for e in Ei:
+                    x0 = i
+                    x1 = i + 1
+                    y0 = V[i].index(e.begin)
+                    y1 = V[i + 1].index(e.end)
+                    if e.weight == 0:
+                        edge_trace0['x'] += tuple([x0, x1, None])
+                        edge_trace0['y'] += tuple([y0, y1, None])
+                    else:
+                        edge_trace1['x'] += tuple([x0, x1, None])
+                        edge_trace1['y'] += tuple([y0, y1, None])
+                    if edgelabel and (i, e) in edgelabel:
+                        text_trace['x'] += tuple([(x0 + x1) / 2])
+                        text_trace['y'] += tuple([(y0 + y1) / 2])
+                        text_trace['text'] += tuple([edgelabel[(i, e)]])
         return edge_trace0, edge_trace1, text_trace
     V = T.V
     E = T.E
     n = T.n
-    a_trace = go.Scatter(
-        x=[-0.5] + list(range(1, n)),
-        y=[-0.2] * (n + 1),
-        text=['A'] + [str(_) for _ in T.A[1:n]],
-        mode='text',
-        hoverinfo='none'
-    )
-    b_trace = go.Scatter(
-        x=[-0.5] + list(range(1, n)),
-        y=[-0.5] * n,
-        text=['B'] + [str(_) for _ in T.B[1:n]],
-        mode='text',
-        hoverinfo='none'
-    )
-    rhoplus_trace = go.Scatter(
-        x=[-0.5] + list(range(n)),
-        y=[-0.8] * (n + 1),
-        text=['rho+'] + [str(_) for _ in T.rhoplus[0:n]],
-        mode='text',
-        hoverinfo='none'
-    )
-    rhominus_trace = go.Scatter(
-        x=[-0.5] + list(range(n)),
-        y=[-1.0] * (n + 1),
-        text=['rho-'] + [str(_) for _ in T.rhominus[0:n]],
-        mode='text',
-        hoverinfo='none'
-    )
+    if maxlevel is None:
+        maxlevel = T.n
+    data = []
+    if hasattr(T, 'A'):
+        a_trace = go.Scatter(
+            x=[-0.5] + list(range(1, n)),
+            y=[-0.2] * (n + 1),
+            text=['A'] + [str(_) for _ in T.A[1:n]],
+            mode='text',
+            hoverinfo='none'
+        )
+        data.append(a_trace)
+    if hasattr(T, 'B'):
+        b_trace = go.Scatter(
+            x=[-0.5] + list(range(1, n)),
+            y=[-0.5] * n,
+            text=['B'] + [str(_) for _ in T.B[1:n]],
+            mode='text',
+            hoverinfo='none'
+        )
+        data.append(b_trace)
+    if hasattr(T, 'rhoplus') and hasattr(T, 'rhominus'):
+        rhoplus_trace = go.Scatter(
+            x=[-0.5] + list(range(n)),
+            y=[-0.8] * (n + 1),
+            text=['rho+'] + [str(_) for _ in T.rhoplus[0:n]],
+            mode='text',
+            hoverinfo='none'
+        )
+        rhominus_trace = go.Scatter(
+            x=[-0.5] + list(range(n)),
+            y=[-1.0] * (n + 1),
+            text=['rho-'] + [str(_) for _ in T.rhominus[0:n]],
+            mode='text',
+            hoverinfo='none'
+        )
+        data.extend([rhoplus_trace, rhominus_trace])
     node_trace = go.Scatter(
         x=[],
         y=[],
         text=[],
         mode='markers+text',
         textposition='top center',  # 'bottom center',
-        hoverinfo='none'
+        hoverinfo="none",
+        hovertext=[]
     )
+    if hovertext:
+        node_trace.hoverinfo = "text"
     for i, vi in enumerate(V):
-        for j, v in enumerate(vi):
-            x, y = i, j
-            node_trace['x'] += tuple([x])
-            node_trace['y'] += tuple([y])
-            if statelabel and (i, v) in statelabel:
-                node_trace['text'] += tuple([statelabel[(i, v)]])
-            else:
-                node_trace['text'] += tuple([v])
+        if i <= maxlevel:
+            for j, v in enumerate(vi):
+                x, y = i, j
+                node_trace['x'] += tuple([x])
+                node_trace['y'] += tuple([y])
+                if statelabel is None:
+                    pass
+                elif statelabel and (i, v) in statelabel:
+                    node_trace['text'] += tuple([statelabel[(i, v)]])
+                else:
+                    node_trace['text'] += tuple([v])
+                if hovertext:
+                    node_trace['hovertext'] += (hovertext[i, v],)
     edge_trace0, edge_trace1, text_trace = edgetrace(V, E, edgelabel=edgelabel)
+    data.extend([edge_trace0, edge_trace1, node_trace, text_trace])
     if subE is not None:
         bedge_trace0, bedge_trace1, subedge_text_trace = edgetrace(
             V, subE, width=3.5, color='rgba(0, 0, 152, .8)', edgelabel=edgelabel)
-        data = [edge_trace0, edge_trace1, node_trace, text_trace,
-                a_trace, b_trace, rhoplus_trace, rhominus_trace,
-                bedge_trace0, bedge_trace1, subedge_text_trace]
-    else:
-        data = [edge_trace0, edge_trace1, node_trace, text_trace,
-                a_trace, b_trace, rhoplus_trace, rhominus_trace]
+        data.extend([bedge_trace0, bedge_trace1, subedge_text_trace])
     fig = go.Figure(data=data,
                     layout=go.Layout(
                         title=title,
@@ -427,6 +471,7 @@ def relindex(B, A):
 
 
 def gensort(G):
+    """ get indices that sort the rows of G first so L is increasing while R is decreasing """
     S = minspan(G)
     S = np.fliplr(np.array(S))
     S[:, 0] *= -1   # sort the R reversely
@@ -568,6 +613,7 @@ def steptuple(codetuple, T, level, bit, p):
 class LookaheadStrategy:
     """
     a lookahead strategy class based on the trellis T and number of lookahead
+    This is a template stub, to be developed in the future.
     """
 
     def __init__(self, T, nlook):
@@ -727,12 +773,15 @@ def edgenodepass(T, codewords, D):
     return edgepass, nodepass
 
 
-def viterbicorpattern(T, c, edgepass, nodepass, codewords, D, ne=3, start=0, init=None):
+def viterbicorpattern(T, c, ne=3, start=0, init=None):
     """
     obtain state transitions with the codewords
+    T has a subdec object with precomputed codewords
     """
     n = T.n
-    ep = edgepass
+    ep = T.edgepass
+    codewords = T.subdec.codewords
+    D = T.D
     # First obtain edge / node -> codewords look-up table
     if start + len(c) > n:
         raise Exception("Senseword length exceeds codeword.")
@@ -743,7 +792,7 @@ def viterbicorpattern(T, c, edgepass, nodepass, codewords, D, ne=3, start=0, ini
             if ne != n:
                 co, closest = init
             else:
-                co, closest = init, nodepass
+                co, closest = init, T.nodepass
             co = co.copy()
             closest = closest.copy() # very important!
     elif start == 0:
@@ -769,13 +818,26 @@ def viterbicorpattern(T, c, edgepass, nodepass, codewords, D, ne=3, start=0, ini
     return co, closest
 
 
-def viterbicorpass(T, c, edgepass, nodepass, D, ne=3, start=0, init=None):
+def viterbicorpass(T, c, ne=3, start=0, init=None):
     """
     Another implementation with only pass
-    TODO describes what it is doing
+
+    Input:
+        T       the trellis
+        c       the received codeword
+        D       indexes set of D
+        ne      number of error tolerated
+        start and init: allows restart from a previous state, if ne=n, init contains only co
+
+    Returns
+        co, closest : correlation and closest path from running the viterbi.
+            co[i, v, d] best correlation to vertex v in coset d, default i - 2*ne -1.
+            closest[i, v, d] whether there exists path <=ne error in coset d that lead to vertex v.
+            if ne = n, closest will be the same as nodepass.
     """
     n = T.n
-    ep = edgepass
+    ep = T.edgepass
+    D = T.D
     # First obtain edge / node -> codewords look-up table
     if start + len(c) > n:
         raise Exception("Senseword length exceeds codeword.")
@@ -783,10 +845,10 @@ def viterbicorpass(T, c, edgepass, nodepass, D, ne=3, start=0, init=None):
         if init is None:
             raise Exception("No initials for start > 0.")
         else:
-            if ne != n:
+            if ne < n:
                 co, closest = init
             else:
-                co, closest = init, nodepass
+                co, closest = init, T.nodepass
             co = co.copy()
             closest = closest.copy() # very important!
     elif start == 0:
@@ -808,8 +870,8 @@ def viterbicorpass(T, c, edgepass, nodepass, D, ne=3, start=0, init=None):
                         closest[i + 1, e.end, d] = True
                     elif co[(i, e.begin, d)] + cor(e.weight, c[i - start]) == co[i + 1, e.end, d]:
                         closest[i + 1, e.end, d] = True
-                    # else correlation is too small, remain initialization.
-                # else no active path, remain initialization.
+                    # else correlation is too small, keep initialization.
+                # else no active path, keep initialization.
     return co, closest
 
 
@@ -817,9 +879,10 @@ def viterbicorpass(T, c, edgepass, nodepass, D, ne=3, start=0, init=None):
 viterbicor = viterbicorpass
 
 
-def get_state_space_enumerate(subdec, T, ne=None):
+def get_state_space_enumerate(T, ne=None):
     n = T.n
     V = T.V
+    subdec = T.subdec
     if ne is None:
         ne = n
     # corcutoff = n - 2 * ne  # do not consider codewords too far away, too big for code prefixes!
@@ -841,9 +904,8 @@ def get_state_space_enumerate(subdec, T, ne=None):
     # Q = {(i, a): dict() for i in range(n) for a in range(2)}
     # assert P[0,0] is not P[0,1] and  P[0,0]==P[0,1], 'Dictionary P init overload!'
     # assert state_space[0] is not state_space[1], 'state_space init overload '
-    edgepass, nodepass = edgenodepass(T, codewords, D)
     for r in itertools.product((0, 1), repeat=n):
-        co, *_ = viterbicor(T, r, edgepass, nodepass, D, ne=ne)
+        co, *_ = viterbicor(T, r, ne=ne)
         # initial state is always the same
         pstate = tuple(co[0, v, d] for v in V[0] for d in D)
         if pstate not in state_space[0]:
@@ -872,33 +934,37 @@ def get_state_space_enumerate(subdec, T, ne=None):
     return state_space, P  # , Q
 
 
-def get_state_space_progressive(subdec, T, ne=None):
+def get_state_space_progressive(T, ne=None):
+    """
+        return the state space progressively run viterbi for one step rather than enumerating c.
+
+    Input
+        T      trellis, has a subdec object with C and S matrices
+        ne     number of error tolerated, if None, ne = T.n
+
+    Returns
+        state_space: list of length n+1, each is the list of states
+        P          : P[i,Action][state]=Next state, here action is means what is received.
+    """
     n = T.n
     V = T.V
     if ne is None:
         ne = n
-    mc = subdec.C.shape[0]  # length of coset messages
-    ms = subdec.S.shape[0]  # length of the span basis
-    D = list(itertools.product((0, 1), repeat=mc))  # index of messages
-    s = np.array(list(itertools.product((0, 1), repeat=ms)))
-    codewords = {}
-    for d in D:
-        codewords[d] = (np.array(d).dot(subdec.C) + s.dot(subdec.S)) %2 # group codewords by cosets
+    D = T.D
     # Figure out all the state transitions by enumerating the received strings
-    state_space = [list() for i in range(n + 1)]
-    costate_space = [list() for i in range(n + 1)]
+    state_space = [list() for i in range(n + 1)]  # tuple used in indexing
+    costate_space = [list() for i in range(n + 1)] # dictionary for calculation.
     # Transition matrix, P[i,Action][state]=Next state
     P = {(i, a): dict() for i in range(n) for a in range(2)}
     # Time 0 initial state
-    edgepass, nodepass = edgenodepass(T, codewords, D)
-    co, *_ = viterbicor(T, [], edgepass, nodepass, D, ne=ne)
-    pstate = tuple(co[0, v, d] for v in V[0] for d in D)
+    co, *_ = viterbicor(T, [], ne=ne)
+    pstate = tuple(co[0, v, d] for v in V[0] for d in D)  # previous state
     state_space[0].append(pstate)
     costate_space[0].append(co)
     for i in range(n):
         for ri in range(2):
             for pstate, co in zip(state_space[i], costate_space[i]):
-                nco, *_ = viterbicor(T, [ri], edgepass, nodepass, D, ne=ne, start=i, init=co)
+                nco, *_ = viterbicor(T, [ri], ne=ne, start=i, init=co)
                 nstate = tuple(nco[i + 1, v, d] for v in V[i + 1] for d in D)
                 P[i, ri][pstate] = nstate
                 if nstate not in state_space[i + 1]:
@@ -907,19 +973,49 @@ def get_state_space_progressive(subdec, T, ne=None):
     return state_space, P
 
 
+class StateTrellis():
+    """
+    View the state transition of correlation as a trellis
+
+    Has attributes n, V, E, bT (base trellis)
+    """
+    def __init__(self, state_space, P, bT):
+        self.n = len(state_space) - 1
+        self.V = state_space
+        E = []
+        for i in range(self.n):
+            Ei = []
+            for s in self.V[i]:
+                Ei.append(TrellisEdge(s, P[i, 0][s], 0))
+                Ei.append(TrellisEdge(s, P[i, 1][s], 1))
+            E.append(Ei)
+        self.E = E
+        self.bT = bT
+
+    def hovertext(self):
+        info = {}
+        for i, vi in enumerate(self.V):
+            for v in vi:
+                info[i, v] = "Hi"
+        return info
+
+
 get_state_space = get_state_space_progressive
 
 
 def cal_psuccess(state_space, P, a, p):
     """
-    calculate the probability of error with given policy a
+    calculate the probability of successful transmition with given policy a.
+    p is the crossover probability
+
+    returns a real number psuccess.
     """
     n = len(state_space) - 1
-    ej = {}
+    ej = {}    # ej for expected j.
     for i in range(n + 1):
         for s in state_space[i]:
-            ej[i, s] = 0
-    ej[0, state_space[0][0]] = 1
+            ej[i, s] = 0          # expected probability of reaching state s in level i.
+    ej[0, state_space[0][0]] = 1.  # better have a real number
     for i in range(n):
         for s in state_space[i]:
             if a[i, s] == 'indifferent':
@@ -932,7 +1028,7 @@ def cal_psuccess(state_space, P, a, p):
     for s in state_space[n]:
         if s[0] > max(s[1:]):
             psuccess += ej[n, s]
-    return psuccess
+    return psuccess             # sum(ej[n, s] for s in state_space[n] if s[0] > max(s[1:]))
 
 
 def jinit_psucc(state_space):
@@ -959,7 +1055,7 @@ def jinit_abscor(state_space):
     return j
 
 
-def simulate_cor(state_space, P, T, p, jinit=jinit_psucc):
+def simulate_cor(state_space, P, p, jinit=jinit_psucc):
     """
     simulate with correlation as states
 
@@ -967,8 +1063,7 @@ def simulate_cor(state_space, P, T, p, jinit=jinit_psucc):
 
     returns: TODO
     """
-    n = T.n
-    V = T.V
+    n = len(state_space)-1
     # p = symbols('p')  # crossover probability
     j = jinit(state_space)
     a = {}
