@@ -194,6 +194,7 @@ class SubDecodeTest(unittest.TestCase):
         T.setsub(CB)
         return T
 
+    @unittest.skip("Skipping decoder classifier")
     def test_decode(self):
         G = G_rm13
         mc = 2
@@ -203,6 +204,7 @@ class SubDecodeTest(unittest.TestCase):
         # print(w, subdec.decode(w.dot(G)))
         np.testing.assert_array_equal(w[:mc], subdec.decode(w.dot(G))) # TODO: Not yet %2
 
+    @unittest.skip("Skipping decoder classifier")
     def test_generator_decode(self):
         G = G_rm13
         mc = 2
@@ -215,6 +217,7 @@ class SubDecodeTest(unittest.TestCase):
         w = np.random.randint(0, 2, G.shape[0])
         np.testing.assert_array_equal(w[indc], subdec.decode(w.dot(G))) # TODO: Not yet %2
 
+    @unittest.skip("Skipping decoder classifier")
     def test_generator_combination(self):
         G = G_rm13
         CB = [[1, 0, 1, 0], [1, 0, 0, 1]]
@@ -279,45 +282,47 @@ class SubDecodeTest(unittest.TestCase):
 
     def test_get_state_space(self, T=T_rm13, CB=[[1, 0, 1, 0], [1, 0, 0, 1]], ne=None):
         T.setsub(CB)
-        subdec = T.subdec
         state_space, P = get_state_space(T, ne=ne)
-        return (subdec, state_space, P)
+        return (state_space, P)
 
     def test_simulate_cor(self, plot=False, ps=np.arange(0, 0.55, 0.1),
                           CB=[[1, 0, 1, 0], [1, 0, 0, 1]], T=T_rm13,
                           jinits=[jinit_psucc, jinit_cordiff, jinit_abscor], suffix='rm13'):
         """
-        for a given construction, compare policies in jinits
-        TODO: Should we save the optimal policy as well for examination?
-        Instead of indexing psucc, and js by function, index by order in jinits
+        For a given construction in CB, compare policies in jinits
+        returns: ps, psucc, jlist, alist, index by order in jinits.
         """
         psuccs = []
-        js = []
-        subdec, state_space, P = self.test_get_state_space(T=T, CB=CB)
+        jlist = []
+        alist = []
+        T.setsub(CB)
+        T.compute_mdp()
         # print("State space size: \t", [len(s) for s in state_space])
         # print("State_space Obtained!")
         for jinit in jinits:
             psucc = []
             for p in ps:
-                j, a = simulate_cor(state_space, P, p=p, jinit=jinit)
-                psucc.append(cal_psuccess(state_space, P, a, p=p))
+                j, a = T.dpsolve(p=p, jinit=jinit)
+                psucc.append(T.cal_psuccess(a, p=p))
             psuccs.append(psucc)
-            js.append(j)
+            jlist.append(j)
+            alist.append(a)
         plot_psucc(ps, psuccs, suffix=suffix, plot=plot)
-        return ps, psuccs, state_space
+        return ps, psuccs, jlist, alist
 
     def test_simulate_cor_cosets(self, plot=False, ps=np.arange(0, 0.55, 0.1),
                                  T=T_rm13, dim=2, suffix='rm13'):
         """
         Test the performance for all possible coset divisions
+        TODO: a better way of organizing and preserving results
         """
         results = {}
         # results['G'] = G.tolist()
         # results['suffix'] = suffix
         for i, CB in enumerate(echelons(dim, T.m)):
-            ps, psuccs, state_space = \
+            ps, psuccs = \
             self.test_simulate_cor(CB=CB, T=T, ps=ps, plot=plot, suffix=suffix + '_{0}dim_{1}'.format(dim, i))
-            results[i] = [CB.tolist(), [len(s) for s in state_space], psuccs]
+            results[i] = [CB.tolist(), [len(s) for s in T.state_space], psuccs]
         save_obj(results, 'data/'+suffix+'_{}dim_results'.format(dim))
         return results
 
@@ -474,16 +479,18 @@ class SubDecodeTest(unittest.TestCase):
                                          label='tab:' + suffix + 'dim{}'.format(dim), caption="RM(1,"+suffix[-1]+") dim={} Subspaces".format(dim))
 
     def test_cal_psuccess(self):
+        """ making sure psucc coincides with dp initialization"""
         ps = np.arange(0, 0.55, 0.1)
         CB = [[1, 0, 1, 0], [1, 0, 0, 1]]
         perror = []
         psucc = []
         T = T_rm13
-        subdec, state_space, P = self.test_get_state_space(T=T_rm13, CB=CB)
+        T.setsub(CB)
+        state_space, P = T.compute_mdp()
         for p in ps:
-            j, a = simulate_cor(state_space, P, p=p)
+            j, a = T.dpsolve(p=p, jinit=jinit_psucc)
             perror.append(j[0, state_space[0][0]])
-            psucc.append(cal_psuccess(state_space, P, a, p=p))
+            psucc.append(T.cal_psuccess(a, p=p))
         np.testing.assert_allclose(np.array(perror), np.array(psucc))
 
 

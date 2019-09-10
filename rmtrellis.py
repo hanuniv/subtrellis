@@ -12,7 +12,6 @@ from pprint import pprint
 
 # import networkx as nx
 
-
 class SubDecode:
     """
     class for testing which coset a codeword belongs to.
@@ -139,10 +138,82 @@ class Trellis:
         self.codewords = np.array(self.codewords)
 
     def setsub(self, SB):
+        """ set subdec objects and related indexing D, edge node pass"""
         self.subdec = SubDecodeCombineGenerator(self.G, SB)
         self.subdec.compute_codewords()   # save codewords dictionary in subdec
         self.D = self.subdec.D
         self.edgepass, self.nodepass = edgenodepass(self, self.subdec.codewords, self.subdec.D)
+        self.state_space = None  # compute as needed
+        self.P = None            # compute as needed
+        self.p = None
+        self.j = None
+        self.a = None
+
+    def compute_mdp(self):
+        """
+        compute state_space transitions and P as needed, to be called after setsub
+        returns state_space and P
+        """
+        if self.state_space is None:
+            state_space, P = get_state_space(self)
+            self.state_space = state_space
+            self.P = P
+            return state_space, P
+        else:
+            return self.state_space, self.P     # already computed
+
+    def dpsolve(self, p, jinit):
+        """compute optimal policies, to be called after setsub"""
+        if self.p == p:
+            return self.j, self.a
+        if self.state_space is None:
+            self.compute_mdp()
+        self.p = p
+        self.j, self.a = dpsolve_cor(self.state_space, self.P, p, jinit=jinit)
+        return self.j, self.a
+
+    def cal_psuccess(self, a=None, p=None):
+        """
+        returns a real number psuccess, if a, p is None, use the a, p from self.dpsolve
+        """
+        if a is None:
+            a = self.a
+            if a is None:
+                raise AttributeError("Please specify optimal policies in the argument or call dpsolve() first")
+        if p is None:
+            p = self.p
+            if p is None:
+                raise AttributeError("Please specify crossover probability in the argument or call dpsolve() first")
+        return cal_psuccess(self.state_space, self.P, a, p)
+
+
+class StateTrellis():
+    """
+    View the state transition of correlation as a trellis
+
+    Has attributes n, V, E, bT (base trellis)
+    """
+    def __init__(self, state_space, P, bT):
+        self.n = len(state_space) - 1
+        self.V = state_space
+        E = []
+        for i in range(self.n):
+            Ei = []
+            for s in self.V[i]:
+                Ei.append(TrellisEdge(s, P[i, 0][s], 0))
+                Ei.append(TrellisEdge(s, P[i, 1][s], 1))
+            E.append(Ei)
+        self.E = E
+        self.bT = bT
+
+    def hovertext(self):
+        info = {}
+        for i, vi in enumerate(self.V):
+            for v in vi:
+                info[i, v] = "Hi"
+        return info
+
+
 
 def closest(c, codewords):
     """
@@ -610,34 +681,34 @@ def steptuple(codetuple, T, level, bit, p):
             codetuple._replace(prob=prob * p, c=c + [1 - bit])]
 
 
-class LookaheadStrategy:
-    """
-    a lookahead strategy class based on the trellis T and number of lookahead
-    This is a template stub, to be developed in the future.
-    """
+# class LookaheadStrategy:
+#     """
+#     a lookahead strategy class based on the trellis T and number of lookahead
+#     This is a template stub, to be developed in the future.
+#     """
 
-    def __init__(self, T, nlook):
-        self.T = T
-        self.nlook = nlook  # number of look ahaed
+#     def __init__(self, T, nlook):
+#         self.T = T
+#         self.nlook = nlook  # number of look ahaed
 
-    def hitme(self, piles, level, p=0.9):
-        """ return the next bit to send, given current piles and level"""
-        lookpiles = [piles[-1]]
-        for _ in range(self.nlook):
-            step(lookpiles, T, level)  # TODO,add next level probability
-        # Skip: assign winlose to the last pile
-        # backpropagatewl(lookpile)
-        # find the one with the best wining probability, when there is a tie, include them all
-        bestprob = 0
-        bestc = []
-        for endings in lookpiles[-1]:
-            if endings.prob == bestprob:
-                bestc.append(endings.c)
-            # TODO, find substitute function
-            elif substitute(endings.prob, p) > substitute(bestprob, p):
-                bestprob = endings.prob
-                bestc = [endings.c]
-        return bestc[0][0]  # decide the first choice of the first best policy
+#     def hitme(self, piles, level, p=0.9):
+#         """ return the next bit to send, given current piles and level"""
+#         lookpiles = [piles[-1]]
+#         for _ in range(self.nlook):
+#             step(lookpiles, T, level)  # STUB: add next level probability
+#         # Skip: assign winlose to the last pile
+#         # backpropagatewl(lookpile)
+#         # find the one with the best wining probability, when there is a tie, include them all
+#         bestprob = 0
+#         bestc = []
+#         for endings in lookpiles[-1]:
+#             if endings.prob == bestprob:
+#                 bestc.append(endings.c)
+#             # stub: find substitute function
+#             elif substitute(endings.prob, p) > substitute(bestprob, p):
+#                 bestprob = endings.prob
+#                 bestc = [endings.c]
+#         return bestc[0][0]  # decide the first choice of the first best policy
 
 
 def send0always(ns):
@@ -972,34 +1043,7 @@ def get_state_space_progressive(T, ne=None):
                     costate_space[i + 1].append({(i + 1, v, d): nco[i + 1, v, d] for v in V[i + 1] for d in D})
     return state_space, P
 
-
-class StateTrellis():
-    """
-    View the state transition of correlation as a trellis
-
-    Has attributes n, V, E, bT (base trellis)
-    """
-    def __init__(self, state_space, P, bT):
-        self.n = len(state_space) - 1
-        self.V = state_space
-        E = []
-        for i in range(self.n):
-            Ei = []
-            for s in self.V[i]:
-                Ei.append(TrellisEdge(s, P[i, 0][s], 0))
-                Ei.append(TrellisEdge(s, P[i, 1][s], 1))
-            E.append(Ei)
-        self.E = E
-        self.bT = bT
-
-    def hovertext(self):
-        info = {}
-        for i, vi in enumerate(self.V):
-            for v in vi:
-                info[i, v] = "Hi"
-        return info
-
-
+# Alias
 get_state_space = get_state_space_progressive
 
 
@@ -1026,24 +1070,33 @@ def cal_psuccess(state_space, P, a, p):
                 ej[i + 1, P[i, 1 - a[i, s]][s]] += p * ej[i, s]
     psuccess = 0
     for s in state_space[n]:
-        if s[0] > max(s[1:]):
+        if len(s)==1 or s[0] > max(s[1:]):
             psuccess += ej[n, s]
     return psuccess             # sum(ej[n, s] for s in state_space[n] if s[0] > max(s[1:]))
 
 
 def jinit_psucc(state_space):
+    """
+    initialize with probability of success, if there is only one coset, psucc=1
+    """
     n = len(state_space) - 1
     j = {}
     for s in state_space[n]:
-        j[n, s] = 1 if s[0] > max(s[1:]) else 0   # most states are failed decoding
+        j[n, s] = 1 if len(s)==1 or s[0] > max(s[1:]) else 0   # most states are failed decoding
     return j
 
 
 def jinit_cordiff(state_space):
+    """
+    initialize with correlation difference, if there is only one coset, init with absolute correlation
+    """
     n = len(state_space) - 1
     j = {}
     for s in state_space[n]:
-        j[n, s] = s[0] - max(s[1:])               # correlation difference
+        if len(s)==1:
+            j[n, s] = s[0]
+        else:
+            j[n, s] = s[0] - max(s[1:])
     return j
 
 
@@ -1055,13 +1108,13 @@ def jinit_abscor(state_space):
     return j
 
 
-def simulate_cor(state_space, P, p, jinit=jinit_psucc):
+def dpsolve_cor(state_space, P, p, jinit=jinit_psucc):
     """
     simulate with correlation as states
 
     subdec: The subcode classifier, we will attempt to transmit the message [0]_1^mc, i.e. in D[0]
 
-    returns: TODO
+    returns: j and a, optimal cost and policies
     """
     n = len(state_space)-1
     # p = symbols('p')  # crossover probability
