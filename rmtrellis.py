@@ -879,6 +879,11 @@ def viterbicorpattern(T, c, ne=3, start=0, init=None):
     for i in range(start, start + len(c)):
         for e in T.E[i]:
             for d in D:
+                co[(i + 1, e.end, d)] = (i + 1) - 2 * ne - 1                   # set cor to cutoff - 1
+                closest[(i + 1, e.end, d)] = np.full(len(codewords[d]), False)
+    for i in range(start, start + len(c)):
+        for e in T.E[i]:
+            for d in D:
                 activethrough = np.logical_and(ep[i, e, d], closest[i, e.begin, d])
                 if np.any(activethrough):
                     if (i + 1, e.end, d) not in co or \
@@ -887,9 +892,7 @@ def viterbicorpattern(T, c, ne=3, start=0, init=None):
                         closest[i + 1, e.end, d] = activethrough
                     elif co[(i, e.begin, d)] + cor(e.weight, c[i - start]) == co[i + 1, e.end, d]:
                         closest[i + 1, e.end, d] = np.logical_or(closest[i + 1, e.end, d], activethrough)
-                else:   # No active paths lead to e.end
-                    co[(i + 1, e.end, d)] = (i + 1) - 2 * ne - 1                   # set cor to cutoff - 1
-                    closest[(i + 1, e.end, d)] = np.full(len(codewords[d]), False)
+                # else No active paths lead to e.end, no updates
     return co, closest
 
 
