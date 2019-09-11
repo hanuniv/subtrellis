@@ -13,7 +13,7 @@ import json
 _G_rm13 = np.array([[1, 1, 1, 1, 1, 1, 1, 1],
                     [0, 0, 0, 0, 1, 1, 1, 1],
                     [0, 0, 1, 1, 0, 0, 1, 1],
-                    [0, 1, 0, 1, 0, 1, 0, 1]])
+                    [0, 1, 0, 1, 0, 1, 0, 1]], dtype=np.int)
 G_rm13 = minspangen(_G_rm13)
 T_rm13 = Trellis(G_rm13)
 
@@ -21,7 +21,7 @@ _G_rm14 = np.array([[1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1],
                     [0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 1, 1, 1, 1, 1, 1],
                     [0, 0, 0, 0, 1, 1, 1, 1, 0, 0, 0, 0, 1, 1, 1, 1],
                     [0, 0, 1, 1, 0, 0, 1, 1, 0, 0, 1, 1, 0, 0, 1, 1],
-                    [0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1]])
+                    [0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1]], dtype=np.int)
 G_rm14 = minspangen(_G_rm14)
 T_rm14 = Trellis(G_rm14)
 
@@ -188,7 +188,7 @@ class Test(unittest.TestCase):
 class SubDecodeTest(unittest.TestCase):
 
     @staticmethod
-    def rm13_data(CB = [[1, 0, 1, 0], [1, 0, 0, 1]]):
+    def rm13_data(CB=[[1, 0, 1, 0], [1, 0, 0, 1]]):
         G = G_rm13
         T = T_rm13
         T.setsub(CB)
@@ -202,7 +202,7 @@ class SubDecodeTest(unittest.TestCase):
         subdec = SubDecode(G[:mc], G[mc:])
         w = np.random.randint(0, 2, G.shape[0])
         # print(w, subdec.decode(w.dot(G)))
-        np.testing.assert_array_equal(w[:mc], subdec.decode(w.dot(G))) # TODO: Not yet %2
+        np.testing.assert_array_equal(w[:mc], subdec.decode(w.dot(G)))  # TODO: Not yet %2
 
     @unittest.skip("Skipping decoder classifier")
     def test_generator_decode(self):
@@ -210,12 +210,12 @@ class SubDecodeTest(unittest.TestCase):
         mc = 2
         subdec = SubDecodeFirstGenerator(G, mc)
         w = np.random.randint(0, 2, G.shape[0])
-        np.testing.assert_array_equal(w[:mc], subdec.decode(w.dot(G))) # TODO: Not yet %2
+        np.testing.assert_array_equal(w[:mc], subdec.decode(w.dot(G)))  # TODO: Not yet %2
         subdec = SubDecodeSelectedGenerator(G, range(2))  # work with iterator as well
         indc = [1, 2]
         subdec = SubDecodeSelectedGenerator(G, indc)
         w = np.random.randint(0, 2, G.shape[0])
-        np.testing.assert_array_equal(w[indc], subdec.decode(w.dot(G))) # TODO: Not yet %2
+        np.testing.assert_array_equal(w[indc], subdec.decode(w.dot(G)))  # TODO: Not yet %2
 
     @unittest.skip("Skipping decoder classifier")
     def test_generator_combination(self):
@@ -224,7 +224,7 @@ class SubDecodeTest(unittest.TestCase):
         subdec = SubDecodeCombineGenerator(G, CB)
         self.assertEqual(np.linalg.matrix_rank(subdec.G), G.shape[0])
 
-    @unittest.skip("Skipping edge node pattern tests") # TODO update interface
+    @unittest.skip("Skipping edge node pattern tests")  # TODO update interface
     def test_edgenodepattern(self):
         """ See if D[0]'s trajectory is correct """
         T = self.rm13_data()
@@ -242,7 +242,7 @@ class SubDecodeTest(unittest.TestCase):
         ep0 = {(i, e): list(ep[i, e, d]) for i in range(n) for e in E[i]}
         self.assertEqual(ep0, '')
 
-    # @unittest.skip("Skipping Pass and Pattern compare")  # TODO, different viterbi updates?
+    @unittest.skip("Skipping Pass and Pattern compare")
     def test_viterbicorpasspattern(self):
         """make sure pass and pattern are the same"""
         T = self.rm13_data()
@@ -312,19 +312,31 @@ class SubDecodeTest(unittest.TestCase):
         return ps, psuccs, jlist, alist
 
     def test_simulate_cor_cosets(self, plot=False, ps=np.arange(0, 0.55, 0.1),
-                                 T=T_rm13, dim=2, suffix='rm13'):
+                                 T=T_rm13, dim=2, suffix='rm13', index=None, save=True):
         """
         Test the performance for all possible coset divisions
-        TODO: a better way of organizing and preserving results
+        index: specific form to execute, if not None, won't save results.
+        TODO: a better way of organizing and preserving results,
+        TODO: ability to execute individual CB's
+        especially since state space now takes time to draw, save state spaces is a good idea.
         """
         results = {}
         # results['G'] = G.tolist()
         # results['suffix'] = suffix
-        for i, CB in enumerate(echelons(dim, T.m)):
-            ps, psuccs = \
-            self.test_simulate_cor(CB=CB, T=T, ps=ps, plot=plot, suffix=suffix + '_{0}dim_{1}'.format(dim, i))
+        if not index:
+            allechelons = enumerate(echelons(dim, T.m))
+        else:
+            allechelons = [(i, CB) for (i, CB) in enumerate(echelons(dim, T.m)) if i in index]
+        for i, CB in allechelons:
+            ps, psuccs, jlist, alist = \
+                self.test_simulate_cor(CB=CB, T=T, ps=ps, plot=plot,
+                                       suffix=suffix + '_{0}dim_{1}'.format(dim, i))
             results[i] = [CB.tolist(), [len(s) for s in T.state_space], psuccs]
-        save_obj(results, 'data/'+suffix+'_{}dim_results'.format(dim))
+            if save:
+                save_pickle((T, CB, jlist, alist, ps, psuccs), 'data/statespace_' +
+                            suffix + '_{0}dim_{1}'.format(dim, i))
+        if not index:
+            save_obj(results, 'data/' + suffix + '_{}dim_results'.format(dim))
         return results
 
     def slice_results(self, results):
@@ -334,26 +346,26 @@ class SubDecodeTest(unittest.TestCase):
         state_space_all = np.array([ss for i, (_, ss, _) in results.items()])
         return {'psucc': dpps, 'CBs': CBs, 'states': state_space_all}
 
-    def analyze_results(self, results, ps = np.arange(0, 0.55, 0.1), dim=2, suffix='rm13'):
+    def analyze_results(self, results, ps=np.arange(0, 0.55, 0.1), dim=2, suffix='rm13'):
         # TODO: dim should be part of results, save full results for better retrival
         sresults = self.slice_results(results)
         dpps, CBs, state_space_all = sresults['psucc'], sresults['CBs'], sresults['states']
         # analyze psucc order
         print("Ordering of psucces along different ps")
         for i in range(dpps.shape[1]):
-            dporder = np.lexsort((dpps[:,i],))
+            dporder = np.lexsort((dpps[:, i],))
             print(dporder)
         # print(dpps[dporder])
         # for analyzation of state_space size
         print("Size of state spaces")
         print(state_space_all)
         # plot a combo graph of all probability of errors
-        pspan = slice(0,len(ps)) # adjust span as needed
+        pspan = slice(0, len(ps))  # adjust span as needed
         plt.figure()
         plt.plot(ps[pspan], dpps[dporder, pspan].T)
         plt.xlabel('Crossover Probability')
         plt.ylabel('Probability of Successful Transmission')
-        plt.savefig('output/mdpcor_'+suffix+'_{}dim_'.format(dim)+'all'+'.png')
+        plt.savefig('output/mdpcor_' + suffix + '_{}dim_'.format(dim) + 'all' + '.png')
         plt.clf()
         # group together curves by the last ps
         group = groupps(dpps, -1, 1e-3)
@@ -361,14 +373,14 @@ class SubDecodeTest(unittest.TestCase):
         print(group)
 
     def getresults(self, suffix='rm13', dim=1):
-        return load_obj('data/'+suffix+'_{}dim_results'.format(dim))
+        return load_obj('data/' + suffix + '_{}dim_results'.format(dim))
 
     def getstategroup(self, suffix='rm13', dim=1):
         results = self.getresults(suffix=suffix, dim=dim)
         sresults = self.slice_results(results)
         _, _, state_space_all = sresults['psucc'], sresults['CBs'], sresults['states']
         value, loc = np.unique(state_space_all, axis=0, return_inverse=True)
-        group = [list(np.where(loc==i)[0]) for i in range(value.shape[0])]
+        group = [list(np.where(loc == i)[0]) for i in range(value.shape[0])]
         return value, loc, group
 
     def getpsuccgroup(self, suffix='rm13', dim=1, axis=-1, dec=_pscucc_dec):
@@ -378,8 +390,8 @@ class SubDecodeTest(unittest.TestCase):
         sresults = self.slice_results(results)
         dpps, CBs, _ = sresults['psucc'], sresults['CBs'], sresults['states']
         # group = groupps(dpps, axis, 1e-3)
-        value, loc = np.unique(dpps.round(decimals=dec), axis = 0, return_inverse=True)
-        group = [list(np.where(loc==i)[0]) for i in range(value.shape[0])]
+        value, loc = np.unique(dpps.round(decimals=dec), axis=0, return_inverse=True)
+        group = [list(np.where(loc == i)[0]) for i in range(value.shape[0])]
         return value, loc, group
 
     def groupCBstates(self, group=None, suffix='rm13', dim=1):
@@ -387,7 +399,7 @@ class SubDecodeTest(unittest.TestCase):
         obtain basis vector from filenames
         """
         G = getattr(sys.modules[__name__], "G_" + suffix)
-        results = load_obj('data/'+suffix+'_{}dim_results'.format(dim))
+        results = load_obj('data/' + suffix + '_{}dim_results'.format(dim))
         sresults = self.slice_results(results)
         dpps, CBs, state_space_all = sresults['psucc'], sresults['CBs'], sresults['states']
         if group is None:
@@ -398,11 +410,13 @@ class SubDecodeTest(unittest.TestCase):
         return dpps_group, CBgroup, state_group
 
     def groupanalysis_shorttable(self, suffix='rm13', dim=1,
-        group_psucc=[[1], [0, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14]],
-        group_state=[[1], [0], [2, 12], [4, 6, 8, 10], [3, 5, 7, 9, 11, 13, 14]]):
+                                 group_psucc=[[1], [0, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14]],
+                                 group_state=[[1], [0], [2, 12], [4, 6, 8, 10], [3, 5, 7, 9, 11, 13, 14]]):
         if not refines(group_state, group_psucc):
-            raise ValueError("State group is not a refinement of P[success].")
-        with open('tex/'+suffix + '_' + str(dim) + 'dim.tex', 'w') as f:
+            # raise ValueError("State group is not a refinement of P[success].")
+            print("Dim={}: state group is not a refinement of P[success]".format(dim))
+            group_state = refinement(group_state, group_psucc)
+        with open('tex/' + suffix + '_' + str(dim) + 'dim.tex', 'w') as f:
             f.write(r'''\begin{tabular}{cccc}
             \toprule
             Coset Generator & $|S_i|, i=0, 1, \ldots, 8$ & Plots \\''')
@@ -411,29 +425,34 @@ class SubDecodeTest(unittest.TestCase):
                 for ig, cbg, stateg in zip(group_state, cbgroup, stategroup):
                     l = len(ig)
                     f.write(r'\midrule' + '\n')
-                    f.write(r'{\begin{minipage}{0.3\textwidth}\begin{align*}'+'\n')
+                    f.write(r'{\begin{minipage}{0.3\textwidth}\begin{align*}' + '\n')
                     for i, cb, state in zip(ig, cbg, stateg):
                         f.write(matrix2tex(cb.astype(np.int)) + r'\\' + '\n')
                     f.write(r'\end{align*}' + r'\end{minipage}}' + '\n')
-                    f.write(r' & {\begin{minipage}{0.3\textwidth}$' + matrix2tex(state) + r'$\end{minipage}}' + '\n')
-                    f.write(r' & ' + r'\begin{minipage}{\textwidth/3}\includegraphics[width=\textwidth]{' + \
-                          'subtrellis/output/mdpcor_{0}_{1}dim_{2}.png'.format(suffix, dim, i)+ r'}\end{minipage} \\' + '\n')
+                    f.write(r' & {\begin{minipage}{0.3\textwidth}$' +
+                            matrix2tex(state) + r'$\end{minipage}}' + '\n')
+                    f.write(r' & ' + r'\begin{minipage}{\textwidth/3}\includegraphics[width=\textwidth]{' +
+                            'subtrellis/output/mdpcor_{0}_{1}dim_{2}.png'.format(suffix, dim, i) + r'}\end{minipage} \\' + '\n')
             f.write(r'\bottomrule\end{tabular}' + '\n')
 
-    def groupanalysis_longtable(self, caption='', label='tab:', suffix='rm13', dim=1, decimals=_pscucc_dec,\
-        group_psucc=[[1], [0, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14]],  \
-        group_state=[[1], [0], [2, 12], [4, 6, 8, 10], [3, 5, 7, 9, 11, 13, 14]]):
+    def groupanalysis_longtable(self, caption='', label='tab:', suffix='rm13', dim=1, decimals=_pscucc_dec,
+                                group_psucc=[[1], [0, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14]],
+                                group_state=[[1], [0], [2, 12], [4, 6, 8, 10], [3, 5, 7, 9, 11, 13, 14]]):
         def writeline(ig, cbg, stateg, f, midrule=True):
             if midrule:
                 f.write(r'\cmidrule{1-2}' + '\n')
-            f.write(r'{\begin{minipage}{0.2\textwidth}\begin{align*}'+'\n')
+            f.write(r'{\begin{minipage}{0.3\textwidth}\begin{align*}' + '\n')
             for i, cb, state in zip(ig, cbg, stateg):
                 f.write(matrix2tex(cb.astype(np.int)) + r'\\' + '\n')
             f.write(r'\end{align*}\end{minipage}}' + '\n')
-            f.write(r' & {\begin{minipage}{0.2\textwidth}\begin{align*}'+'\n' + matrix2tex(state) + r'\end{align*}\end{minipage}}' + '\n')
+            f.write(r' & {\begin{minipage}{0.3\textwidth}' + '\n' +
+                    str(state) + r'\end{minipage}}' + '\n')
         if not refines(group_state, group_psucc):
-            raise ValueError("State group is not a refinement of P[success].")
-        with open('tex/'+suffix + '_' + str(dim) + 'dim.tex', 'w') as f:
+            # raise ValueError("State group is not a refinement of P[success].")
+            print("Dim={}: state group is not a refinement of P[success]".format(dim))
+            print("Refining group states.")
+            group_state = refinement(group_state, group_psucc)
+        with open('tex/' + suffix + '_' + str(dim) + 'dim.tex', 'w') as f:
             f.write(r'''
             {\setlength\tabcolsep{0pt}%
             \begin{center}
@@ -460,8 +479,9 @@ class SubDecodeTest(unittest.TestCase):
                 f.write(r'\midrule' + '\n')  # long midrule above every group
                 for ig, (dppsg, cbg, stateg) in fl[:1]:
                     writeline(ig, cbg, stateg, f, midrule=False)
-                f.write(r' & ' + r'\multirow{'+str(l)+r'}{*}[0.1ex]{\begin{minipage}[c]{0.4\textwidth} \rule{3pt}{0pt} \includegraphics[width=\textwidth]{' + \
-                      'subtrellis/output/mdpcor_{0}_{1}dim_{2}.png'.format(suffix, dim, ig[0])+ r'''}
+                f.write(r' & ' + r'\multirow{' + str(l) + r'''}{*}[0.1ex]{\begin{minipage}[c]{0.4\textwidth}
+                  \rule{3pt}{0pt} \scriptsize \includegraphics[width=\textwidth]{''' +
+                     'subtrellis/output/mdpcor_{0}_{1}dim_{2}.png'.format(suffix, dim, ig[0]) + r'''}
                       \begin{align*}
                       ''' + matrix2tex(dppsg[0].round(decimals=decimals)) + r'''
                       \end{align*}
@@ -472,13 +492,13 @@ class SubDecodeTest(unittest.TestCase):
             f.write(r'' + '\n' + r'\end{longtable}' + '\n' + r'\end{center} }')
 
     def test_groupanalysis(self, suffix='rm13'):
-        for dim in range(1, 4):
+        for dim in range(1, int(suffix[-1])+1):
             psuccclass, loc, group_psucc = self.getpsuccgroup(suffix=suffix, dim=dim)
             stateclass, loc, group_state = self.getstategroup(suffix=suffix, dim=dim)
-            (group_psucc, group_state)
-            self.groupanalysis_longtable(suffix=suffix,dim=dim, group_psucc=group_psucc, group_state=group_state,\
-                                         label='tab:' + suffix + 'dim{}'.format(dim), caption="RM(1,"+suffix[-1]+") dim={} Subspaces".format(dim))
+            self.groupanalysis_longtable(suffix=suffix, dim=dim, group_psucc=group_psucc, group_state=group_state,
+                                         label='tab:' + suffix + 'dim{}'.format(dim), caption="RM(1," + suffix[-1] + ") dim={} Subspaces".format(dim))
 
+    @unittest.skip("Skipping cal_psuccess")
     def test_cal_psuccess(self):
         """ making sure psucc coincides with dp initialization"""
         ps = np.arange(0, 0.55, 0.1)
@@ -523,6 +543,7 @@ class LookaheadTest(unittest.TestCase):
         # print(latex(_) for _ in tps)
         # print(tps)
 
+
 def refines(A, B):
     """
     return true if the lists in A is a refinement of lists in B
@@ -543,6 +564,25 @@ def refines(A, B):
             return False
     return True
 
+
+def refinement(A, B):
+    """
+    returns the refinement of A and B
+
+    >>> refinement([[1,2], [3]], [[1], [2, 3]])
+    [[1], [2], [3]]
+    """
+    As = [set(a) for a in A]
+    Bs = [set(b) for b in B]
+    Cs = []
+    for a in As:
+        for b in Bs:
+            c = a.intersection(b)
+            if c:
+                Cs.append(c)
+    return [list(c) for c in Cs]
+
+
 def refineiter(fine, coarse, fine_list):
     """
     iterate [(fine, finelistitem)], coarse superset of fine
@@ -556,31 +596,40 @@ def refineiter(fine, coarse, fine_list):
                 fl.append((f, fine_list[i]))
         yield fl, c
 
+
 def matrix2tex(a):
     if a.ndim == 2:
-        return r"\setlength\arraycolsep{2pt}\begin{bmatrix}" + "\n".join([" & ".join(map(str,line))+"\\\\ " for line in a]) + r'\end{bmatrix}'
+        return r"\setlength\arraycolsep{2pt}\begin{bmatrix}" + "\n".join([" & ".join(map(str, line)) + "\\\\ " for line in a]) + r'\end{bmatrix}'
     elif a.ndim == 1:
         return r"\setlength\arraycolsep{2pt}\begin{bmatrix}" + " & ".join(str(e) for e in a) + r'\\ \end{bmatrix}'
     else:
         raise ValueError("Cannot deal with ndim > 2")
 
-def plotresults(results, ps=np.arange(0, 0.55, 0.1),  suffix='rm13'):
+
+def plotresults(results, ps=np.arange(0, 0.55, 0.1), suffix='rm13'):
     """
     Replot all the figures with results
     """
     for i, (_, _, psucc) in results.items():
-        plot_psucc(ps, psucc, suffix=suffix+'_'+str(i))
+        plot_psucc(ps, psucc, suffix=suffix + '_' + str(i))
+
+
+def save_pickle(obj, name):
+    with open(name + '.pkl', 'wb') as f:
+        pickle.dump(obj, f, )
+
+
+def load_pickle(name):
+    with open(name + '.pkl', 'rb') as f:
+        return pickle.load(f)
+
 
 def save_obj(obj, name):
-    # with open(name + '.pkl', 'w') as f:
-        # pickle.dump(obj, f, )
     with open(name + '.json', 'w') as f:
         json.dump(obj, f, sort_keys=True, indent=4)
 
 
 def load_obj(name):
-    # with open(name + '.pkl', 'rb') as f:
-        # return pickle.load(f)
     with open(name + '.json', 'r') as f:
         return json.load(f)
 
@@ -604,13 +653,16 @@ def plot_psucc(ps, psuccs, suffix='cb1', plot=False):
       ps: list of p, the probability of crossover
       psuccs: list of psucc, each has the same length as ps
     """
-    if plot: plt.figure()
+    if plot:
+        plt.figure()
     plt.plot(ps, np.array(psuccs).T)
     plt.legend(['Prob Succ', 'Cor Diff', 'Cor'])
     plt.xlabel('Crossover Probability')
     plt.ylabel('Probability of Successful Transmission')
     plt.savefig('output/mdpcor_' + suffix + '.png')
-    if not plot: plt.clf()
+    if not plot:
+        plt.clf()
+
 
 def echelons(nrow, ncol):
     """generate all possible echelon forms"""
@@ -735,7 +787,11 @@ def rm13trelliscode2(plot=False):
 if __name__ == '__main__':
     # unittest.main()
     # unittest.main(SubDecodeTest)
-    suite = unittest.TestSuite()
-    suite.addTest(SubDecodeTest("test_viterbicorpasspattern"))
-    runner = unittest.TextTestRunner()
-    runner.run(suite)
+    # suite = unittest.TestSuite()
+    # suite.addTest(SubDecodeTest("test_viterbicorpasspattern"))
+    # runner = unittest.TextTestRunner()
+    # runner.run(suite)
+    test = SubDecodeTest()
+    dim = 1
+    results = test.test_simulate_cor_cosets(dim=dim, T=T_rm15, suffix='rm15', save=False)
+    test.analyze_results(results, dim=dim, suffix='rm15')

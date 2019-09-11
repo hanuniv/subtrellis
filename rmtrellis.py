@@ -139,6 +139,7 @@ class Trellis:
 
     def setsub(self, SB):
         """ set subdec objects and related indexing D, edge node pass"""
+        self.SB = SB
         self.subdec = SubDecodeCombineGenerator(self.G, SB)
         self.subdec.compute_codewords()   # save codewords dictionary in subdec
         self.D = self.subdec.D
@@ -210,9 +211,9 @@ class StateTrellis():
     def hovertext(self):
         info = {}
         for i, Statei in enumerate(self.V):
-            co = dict(zip([(i, v, d) for v in self.T.V[i] for d in self.T.D], Statei))
             for state in Statei:
                 info[i, state] = ""
+                co = dict(zip([(i, v, d) for v in self.T.V[i] for d in self.T.D], state))
                 for v in self.T.V[i]:
                     info[i, state] += v + ':' + str([co[i, v, d] for d in self.T.D]) + '\n'
         return info
@@ -346,7 +347,7 @@ def trellis(G, S):
     E = []
     for i in range(0, n):
         gt = G[:, i][list(A[i + 1])]
-        gt = ''.join([str(_) for _ in gt])
+        gt = ''.join([str(int(_)) for _ in gt])
         us = bits(alpha[i + 1])
         Ei = []
         for u in us:
@@ -516,6 +517,8 @@ def inner(u, gt):
     0
     >>> inner('01', '11')
     1
+    >>> inner('11', '11')
+    0
     """
     return sum(ui == '1' and gi == '1' for ui, gi in zip(u, gt)) % 2
 
