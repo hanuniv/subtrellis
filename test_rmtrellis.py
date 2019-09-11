@@ -242,13 +242,14 @@ class SubDecodeTest(unittest.TestCase):
         ep0 = {(i, e): list(ep[i, e, d]) for i in range(n) for e in E[i]}
         self.assertEqual(ep0, '')
 
-    @unittest.skip("Skipping Pass and Pattern compare")  # TODO, different viterbi updates?
+    # @unittest.skip("Skipping Pass and Pattern compare")  # TODO, different viterbi updates?
     def test_viterbicorpasspattern(self):
         """make sure pass and pattern are the same"""
         T = self.rm13_data()
         r = np.random.randint(0, 2, T.n)
         co, closest = viterbicorpattern(T, r, ne=3)
         co1, closest1 = viterbicorpass(T, r, ne=3)
+        self.assertEqual(len(co), len(co1))
         self.assertEqual(co, co1)
         self.assertEqual(closest1, dict((k, np.any(v)) for k, v in closest.items()))
 
@@ -732,4 +733,9 @@ def rm13trelliscode2(plot=False):
 
 
 if __name__ == '__main__':
-    unittest.main()
+    # unittest.main()
+    # unittest.main(SubDecodeTest)
+    suite = unittest.TestSuite()
+    suite.addTest(SubDecodeTest("test_viterbicorpasspattern"))
+    runner = unittest.TextTestRunner()
+    runner.run(suite)

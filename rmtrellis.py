@@ -193,9 +193,10 @@ class StateTrellis():
 
     Has attributes n, V, E, bT (base trellis)
     """
-    def __init__(self, state_space, P, bT):
-        self.n = len(state_space) - 1
-        self.V = state_space
+    def __init__(self, T):
+        self.n = len(T.state_space) - 1
+        self.V = T.state_space
+        P = T.P
         E = []
         for i in range(self.n):
             Ei = []
@@ -204,13 +205,16 @@ class StateTrellis():
                 Ei.append(TrellisEdge(s, P[i, 1][s], 1))
             E.append(Ei)
         self.E = E
-        self.bT = bT
+        self.T = T
 
     def hovertext(self):
         info = {}
-        for i, vi in enumerate(self.V):
-            for v in vi:
-                info[i, v] = "Hi"
+        for i, Statei in enumerate(self.V):
+            co = dict(zip([(i, v, d) for v in self.T.V[i] for d in self.T.D], Statei))
+            for state in Statei:
+                info[i, state] = ""
+                for v in self.T.V[i]:
+                    info[i, state] += v + ':' + str([co[i, v, d] for d in self.T.D]) + '\n'
         return info
 
 
