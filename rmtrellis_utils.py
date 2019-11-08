@@ -71,13 +71,14 @@ def compress_pickle(suffix='rm14', dim=2, inds = None):
         ias = [indexadd(alists, a) for a in alist]
         ijs = [indexadd(jlists, j) for j in jlist]
         save_pickle((igs, SB, istates, iPs, ips, ipsucc, ias, ijs), dataname + str(i) + '_l')
-    for name in (Gs, states, Ps, pss, psuccs, alists, jlists):
+    for name in (Gs, pss, psuccs):
         for s in retrieve_name(name):
             if s.endswith('s'): # otherwise save to "name"
                 namestring = s
                 break
         print("Saving: {} with length {}".format(namestring, len(name)))
         save_pickle(name, dataname + namestring)
+    save_pickle([alists, jlists, Ps, states], dataname+'ajps') # combine big items into one to save storage
 
 def test_compress(suffix='rm14', dim=2, inds = None):
     """ testing specific retrieval, inds can be [0, 2] or None"""
@@ -88,12 +89,13 @@ def test_compress(suffix='rm14', dim=2, inds = None):
         T, SB, ps, psucc, jlist, alist = load_pickle(dataname + str(ind))
         igs, SB, istates, iPs, ips, ipsucc, ias, ijs = load_pickle(dataname + str(ind) + '_l')
         Gs = load_pickle(dataname+'Gs')
-        states = load_pickle(dataname+'states')
-        Ps = load_pickle(dataname+'Ps')
         pss = load_pickle(dataname+'pss')
         psuccs = load_pickle(dataname+'psuccs')
-        alists = load_pickle(dataname+'alists')
-        jlists = load_pickle(dataname+'jlists')
+        # alists = load_pickle(dataname+'alists')
+        # jlists = load_pickle(dataname+'jlists')
+        # Ps = load_pickle(dataname+'Ps')
+        # states = load_pickle(dataname+'states')
+        alists, jlists, Ps, states = load_pickle(dataname+'ajps')
         assert np.allclose(Gs[igs], T.G)
         assert states[istates] == T.state_space
         assert Ps[iPs] == T.P
@@ -103,6 +105,13 @@ def test_compress(suffix='rm14', dim=2, inds = None):
             assert j == jlists[ij]
         for a, ia in zip(alist, ias):
             assert a == alists[ia]
+
+def combine_pickles(files, newfile):
+    items = []
+    for f in files:
+        items.append(load_pickle(f))
+    save_pickle(items, newfile)
+
 
 def main():
     compress_pickle(suffix='rm14', dim=4)
