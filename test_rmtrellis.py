@@ -10,6 +10,12 @@ import sys
 import json
 
 # constants for testing
+_G_rm12 = np.array([[1, 1, 1, 1],
+                    [0, 0, 1, 1],
+                    [0, 1, 0, 1]], dtype=np.int)
+G_rm12 = minspangen(_G_rm12)
+T_rm12 = Trellis(G_rm12)
+
 _G_rm13 = np.array([[1, 1, 1, 1, 1, 1, 1, 1],
                     [0, 0, 0, 0, 1, 1, 1, 1],
                     [0, 0, 1, 1, 0, 0, 1, 1],
