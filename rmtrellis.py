@@ -28,7 +28,9 @@ class SubDecode:
         self.G = np.vstack((C, S))
 
     def get_codewords(self):
-        """return D, codewords, codeword[d] contains the codeword for d in D """
+        """
+        return D, codewords, where codeword[d] contains the codeword for d in D
+        """
         mc = self.C.shape[0]  # length of coset messages
         ms = self.S.shape[0]  # length of the span basis
         D = list(itertools.product((0, 1), repeat=mc))  # index of messages, might have been repeated elsewhere, but here sweep under the rug of subdec and generate as needed
@@ -192,7 +194,9 @@ class StateTrellis():
     """
     View the state transition of correlation as a trellis
 
-    Has attributes n, V, E, bT (base trellis)
+    Has attributes n, V, E, T (base trellis)
+
+    The hovertest function returns a info[(level, state)] for plotting
     """
     def __init__(self, T):
         self.n = len(T.state_space) - 1
@@ -209,6 +213,9 @@ class StateTrellis():
         self.T = T
 
     def hovertext(self):
+        """
+        return information at a particular node, which is the vertices:correlation to every coset
+        """
         info = {}
         for i, Statei in enumerate(self.V):
             for state in Statei:
@@ -216,6 +223,10 @@ class StateTrellis():
                 co = dict(zip([(i, v, d) for v in self.T.V[i] for d in self.T.D], state))
                 for v in self.T.V[i]:
                     info[i, state] += v + ':' + str([co[i, v, d] for d in self.T.D]) + '\n'
+                if self.T.j is not None:
+                    info[i, state] += str(self.T.j[i, state])
+                if self.T.a is not None and (i, state) in self.T.a:
+                    info[i, state] += ' _ ' + str(self.T.a[i, state])
         return info
 
 
@@ -359,7 +370,7 @@ def trellis(G, S):
     return A, B, alpha, beta, rhoplus, rhominus, V, E
 
 
-def plottrellis(T, subE=None, title='Trelis', statelabel=None, edgelabel=None, maxlevel=None, hovertext=None):
+def plottrellis(T, subE=None, title='Trelis', statelabel=None, edgelabel=None, maxlevel=None, hovertext=None, plotabr=False):
     """
     if statelabel == None, do not add state label
     if statelabel == {} or some keys are missing, use default label
@@ -410,40 +421,41 @@ def plottrellis(T, subE=None, title='Trelis', statelabel=None, edgelabel=None, m
     if maxlevel is None:
         maxlevel = T.n
     data = []
-    if hasattr(T, 'A'):
-        a_trace = go.Scatter(
-            x=[-0.5] + list(range(1, n)),
-            y=[-0.2] * (n + 1),
-            text=['A'] + [str(_) for _ in T.A[1:n]],
-            mode='text',
-            hoverinfo='none'
-        )
-        data.append(a_trace)
-    if hasattr(T, 'B'):
-        b_trace = go.Scatter(
-            x=[-0.5] + list(range(1, n)),
-            y=[-0.5] * n,
-            text=['B'] + [str(_) for _ in T.B[1:n]],
-            mode='text',
-            hoverinfo='none'
-        )
-        data.append(b_trace)
-    if hasattr(T, 'rhoplus') and hasattr(T, 'rhominus'):
-        rhoplus_trace = go.Scatter(
-            x=[-0.5] + list(range(n)),
-            y=[-0.8] * (n + 1),
-            text=['rho+'] + [str(_) for _ in T.rhoplus[0:n]],
-            mode='text',
-            hoverinfo='none'
-        )
-        rhominus_trace = go.Scatter(
-            x=[-0.5] + list(range(n)),
-            y=[-1.0] * (n + 1),
-            text=['rho-'] + [str(_) for _ in T.rhominus[0:n]],
-            mode='text',
-            hoverinfo='none'
-        )
-        data.extend([rhoplus_trace, rhominus_trace])
+    if plotabr:
+        if hasattr(T, 'A'):
+            a_trace = go.Scatter(
+                x=[-0.5] + list(range(1, n)),
+                y=[-0.2] * (n + 1),
+                text=['A'] + [str(_) for _ in T.A[1:n]],
+                mode='text',
+                hoverinfo='none'
+            )
+            data.append(a_trace)
+        if hasattr(T, 'B'):
+            b_trace = go.Scatter(
+                x=[-0.5] + list(range(1, n)),
+                y=[-0.5] * n,
+                text=['B'] + [str(_) for _ in T.B[1:n]],
+                mode='text',
+                hoverinfo='none'
+            )
+            data.append(b_trace)
+        if hasattr(T, 'rhoplus') and hasattr(T, 'rhominus'):
+            rhoplus_trace = go.Scatter(
+                x=[-0.5] + list(range(n)),
+                y=[-0.8] * (n + 1),
+                text=['rho+'] + [str(_) for _ in T.rhoplus[0:n]],
+                mode='text',
+                hoverinfo='none'
+            )
+            rhominus_trace = go.Scatter(
+                x=[-0.5] + list(range(n)),
+                y=[-1.0] * (n + 1),
+                text=['rho-'] + [str(_) for _ in T.rhominus[0:n]],
+                mode='text',
+                hoverinfo='none'
+            )
+            data.extend([rhoplus_trace, rhominus_trace])
     node_trace = go.Scatter(
         x=[],
         y=[],
