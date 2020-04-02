@@ -520,36 +520,6 @@ class SubDecodeTest(unittest.TestCase):
             psucc.append(T.cal_psuccess(a, p=p))
         np.testing.assert_allclose(np.array(perror), np.array(psucc))
 
-
-class LookaheadTest(unittest.TestCase):
-    @unittest.skip("Skipping LookaheadTest")
-    def test_low_rate_codes(self):
-        tps = []
-        for nlook in range(1, 5):
-            nodes, subs, T = rm13trelliscode1()
-            piles = simulate_lookahead(subs, T, nlook=nlook, ne=2)
-            totalprob = tallypile(piles[-1])
-            tps.append(totalprob)
-        piles = simulate_lookahead(subs, T, nlook=1, ne=2, send0=send0always)
-        totalprob = tallypile(piles[-1])
-        tps.append(totalprob)
-        # print(latex(tps))
-        # print(latex(_) for _ in tps)
-        # print(tps)
-        tps = []
-        for nlook in range(1, 5):
-            nodes, subs, T = rm13trelliscode2()
-            piles = simulate_lookahead(subs, T, nlook=nlook, ne=2)
-            totalprob = tallypile(piles[-1])
-            tps.append(totalprob)
-        piles = simulate_lookahead(subs, T, nlook=1, ne=2, send0=send0always)
-        totalprob = tallypile(piles[-1])
-        tps.append(totalprob)
-        # print(latex(tps))
-        # print(latex(_) for _ in tps)
-        # print(tps)
-
-
 def refines(A, B):
     """
     return true if the lists in A is a refinement of lists in B
@@ -730,20 +700,6 @@ def rm13trellis():
     # return simulate_subcode(sub, T, maxsub_strategy)
 
 
-def rm13simulate():
-    s, T = rm13trellis()
-    sub = T.codewords[s]
-    piles = simulate_subcode(sub, T, maxsub_strategy)
-    totalprob = tallypile(piles[-1])
-    print(totalprob)
-    piles = simulate_subcode(sub, T, maxratio_strategy)
-    totalprob = tallypile(piles[-1])
-    print(totalprob)
-    piles = simulate_subcode(sub, T, no_strategy)
-    totalprob = tallypile(piles[-1])
-    print(totalprob)
-
-
 def rm13trelliscode1(plot=False):
     G = G_rm13
     T = T_rm13
@@ -790,6 +746,7 @@ def rm13trelliscode2(plot=False):
     return nodes, subs, T  # cut pattern, codewords for subtrellis, and the trellis
 
 
+
 if __name__ == '__main__':
     # unittest.main()
     # unittest.main(SubDecodeTest)
@@ -797,7 +754,8 @@ if __name__ == '__main__':
     # suite.addTest(SubDecodeTest("test_viterbicorpasspattern"))
     # runner = unittest.TextTestRunner()
     # runner.run(suite)
+    # Example Corset test for rm15 1 dim
     test = SubDecodeTest()
-    dim = 1
-    results = test.test_simulate_cor_cosets(dim=dim, T=T_rm15, suffix='rm15', save=False)
-    test.analyze_results(results, dim=dim, suffix='rm15')
+    dim, T, suffix = 1, T_rm15, 'rm15'
+    results = test.test_simulate_cor_cosets(dim=dim, T=T, suffix=suffix, save=False)
+    test.analyze_results(results, dim=dim, suffix=suffix)

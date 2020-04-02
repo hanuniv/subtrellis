@@ -239,3 +239,44 @@ def tallypile2(pl):
         elif p.winning == '_':
             totalprob += p.prob / 2
     return totalprob
+
+class LookaheadTest(unittest.TestCase):
+    @unittest.skip("Skipping LookaheadTest")
+    def test_low_rate_codes(self):
+        tps = []
+        for nlook in range(1, 5):
+            nodes, subs, T = rm13trelliscode1()
+            piles = simulate_lookahead(subs, T, nlook=nlook, ne=2)
+            totalprob = tallypile(piles[-1])
+            tps.append(totalprob)
+        piles = simulate_lookahead(subs, T, nlook=1, ne=2, send0=send0always)
+        totalprob = tallypile(piles[-1])
+        tps.append(totalprob)
+        # print(latex(tps))
+        # print(latex(_) for _ in tps)
+        # print(tps)
+        tps = []
+        for nlook in range(1, 5):
+            nodes, subs, T = rm13trelliscode2()
+            piles = simulate_lookahead(subs, T, nlook=nlook, ne=2)
+            totalprob = tallypile(piles[-1])
+            tps.append(totalprob)
+        piles = simulate_lookahead(subs, T, nlook=1, ne=2, send0=send0always)
+        totalprob = tallypile(piles[-1])
+        tps.append(totalprob)
+        # print(latex(tps))
+        # print(latex(_) for _ in tps)
+        # print(tps)
+
+def rm13simulate():
+    s, T = rm13trellis()
+    sub = T.codewords[s]
+    piles = simulate_subcode(sub, T, maxsub_strategy)
+    totalprob = tallypile(piles[-1])
+    print(totalprob)
+    piles = simulate_subcode(sub, T, maxratio_strategy)
+    totalprob = tallypile(piles[-1])
+    print(totalprob)
+    piles = simulate_subcode(sub, T, no_strategy)
+    totalprob = tallypile(piles[-1])
+    print(totalprob)
